@@ -13,9 +13,10 @@
 | | Dynamic Sessions | ACA Sandbox |
 | --- | --- | --- |
 | 관리 단위 | `Microsoft.App/sessionPools` + `identifier` | `Microsoft.App/sandboxGroups` + sandbox ID |
-| 상태 | 활성 세션의 변수와 파일; 만료 후 소실 | 동일 sandbox의 stop/resume과 명시적 snapshot clone |
-| 격리·실행 | 풀 관리 세션; PythonLTS, 선택 Shell | 격리된 마이크로 VM; 명령 실행 및 수명 주기 제어 |
-| 적합한 작업 | 짧은 대화형 코드 실행 | 재개 가능한 장기 workspace와 수명 주기 비교 |
+| 상태와 자유도 | 활성 세션 동안만 변수·파일 유지 (유휴 만료 후 자동 파기, 스냅샷/일시중지 불가) | 원하는 시점의 `Memory`/`Disk` stop·resume 및 패키지+기동 프로세스 스냅샷 복제(`clone`) 가능 |
+| 호스트 구현 부담 | 단순함 — 요청에 `identifier`(세션 ID)만 넘기면 풀이 할당·라우팅·만료 정리를 자동 처리 | 높음 — 에이전트 요청과 `sandbox_id` 매핑, `create`/`clone`/`stop`/`resume`/`delete` 수명 주기를 직접 제어 |
+| 격리·실행 | 풀 관리 세션; PythonLTS, 선택 Shell | 격리된 마이크로 VM; 외부 CLI 설치 및 백그라운드 프로세스 제어 |
+| 적합한 작업 | 짧은 대화형 코드/셸 실행 | 장기 유지·재개가 필요한 에이전트 전용 작업 공간 |
 
 A와 B는 독립적인 대안입니다. 모델을 사용하는 예제만 Foundry가 필요합니다.
 

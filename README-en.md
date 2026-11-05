@@ -13,9 +13,10 @@ Run model-generated code and commands in isolated execution environments. A trus
 | | Dynamic Sessions | ACA Sandbox |
 | --- | --- | --- |
 | Managed unit | `Microsoft.App/sessionPools` + `identifier` | `Microsoft.App/sandboxGroups` + sandbox ID |
-| State | Variables and files while active; lost on expiry | Same-sandbox stop/resume and explicit snapshot clone |
-| Isolation and execution | Pool-managed sessions; PythonLTS, optional Shell | Isolated micro VM; command execution and lifecycle control |
-| Suitable for | Short interactive code execution | Resumable long-lived workspace and lifecycle comparison |
+| State and flexibility | Variables and files kept only while active (destroyed on idle expiry; no snapshot or manual stop/resume) | On-demand `Memory`/`Disk` stop/resume and snapshot cloning (`clone`) of installed packages + running processes |
+| Host implementation effort | Low — pass a single `identifier` (session ID) and the pool handles allocation, routing, and idle cleanup | Higher — host must map agent requests to `sandbox_id` and orchestrate `create`/`clone`/`stop`/`resume`/`delete` |
+| Isolation and execution | Pool-managed sessions; PythonLTS, optional Shell | Isolated micro VM; external CLI installation and background process control |
+| Suitable for | Short interactive code/shell execution | Resumable, long-lived agent workspace |
 
 A and B are independent alternatives. Only model-backed examples require Foundry.
 

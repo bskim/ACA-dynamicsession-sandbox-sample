@@ -20,9 +20,11 @@
 
 설치된 CLI와 서버 프로그램을 포함한 골든 스냅샷은 서로 다른 에이전트가 사용할 sandbox clone의 기반이 될 수 있고, 기존 sandbox는 stop/resume할 수 있습니다. 공개 clone 예제의 `clone_provision_count=0`은 새 clone에서 설치된 도구를 재사용했음을 보여 줍니다. 여러 에이전트를 연결하려면 별도 라우팅·소유권·보안 제어가 필요하며, 도구·게스트 설정·인터페이스가 바뀌면 스냅샷을 갱신해야 할 수 있습니다.
 
-## 대안 A / B
+## 대안 A / B 및 선택 트레이드오프
 
-A는 `Microsoft.App/sessionPools`의 PythonLTS 세션으로 요청 `identifier`를 라우팅합니다. 동일 활성 ID의 인터프리터와 파일은 재사용되지만 유휴 만료 후 보장되지 않습니다. Shell은 별도 선택 풀입니다. B는 `Microsoft.App/sandboxGroups`의 격리된 마이크로 VM을 만들고 SDK로 exec·stop·resume·삭제를 제어합니다. 샌드박스 내부에 에이전트 CLI 툴체인(`git`, `jq`, `sqlite3`, `agent-tool`·`repo-audit` 등 커스텀 CLI)과 루프백 리포지토리 인덱스 도구 서버(`state_worker.py`)를 설치·제어합니다. Memory는 RAM과 루트 디스크를 보존하고, Disk는 설치 도구와 루트 디스크를 보존하지만 서버 프로세스는 재시작합니다. named snapshot에서 새 clone을 만드는 것은 기존 인스턴스 재개와 다릅니다. [A 가이드](dynamic-sessions.md) · [B 가이드](sandbox.md) · [상태 오라클](snapshot-comparison.md)
+A(`Dynamic Sessions`)는 `Microsoft.App/sessionPools`의 PythonLTS 또는 Shell 세션으로 요청 `identifier`를 라우팅합니다. 호출 측에서는 `identifier` 문자열 하나만 관리하면 세션 풀이 할당·라우팅·유휴 만료 정리를 자동으로 처리하므로 구현이 매우 단순합니다. 대신 원하는 시점에 세션을 일시 중지(`stop`)했다가 재개(`resume`)하거나 상태를 스냅샷으로 찍어 복제(`clone`)할 수는 없으며, 유휴 시간이 지나면 상태가 사라집니다.
+
+B(`ACA Sandbox`)는 `Microsoft.App/sandboxGroups`의 격리된 마이크로 VM을 만들고 SDK로 exec·stop·resume·snapshot·clone·삭제를 직접 제어합니다. 샌드박스 내부에 에이전트 CLI 툴체인(`git`, `jq`, `sqlite3`, `agent-tool`·`repo-audit` 등)과 루프백 리포지토리 인덱스 도구 서버(`state_worker.py`)를 설치하고, 원하는 시점에 `Memory`(RAM+디스크 보존) 또는 `Disk`(디스크 보존) 모드로 중지·재개하거나 워밍업된 상태를 명시적 스냅샷으로 복제할 수 있어 자유도가 높습니다. 대신 에이전트 요청을 어느 `sandbox_id`에 연결할지 매핑하는 상태 관리와 `stop`/`resume`/`delete` 수명 주기 오케스트레이션을 고객(호스트 백엔드)에서 직접 구현해야 합니다. [A 가이드](dynamic-sessions.md) · [B 가이드](sandbox.md) · [상태 오라클](snapshot-comparison.md)
 
 ## 운영 경계
 
