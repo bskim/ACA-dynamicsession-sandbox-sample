@@ -1,0 +1,35 @@
+# 비공개 운영 지침과 내부 조사·계획·기록
+.internal/
+/AGENTS.md
+/*.code-workspace
+foundry-model-deployments*.json
+
+# 환경 설정과 비밀: 루트의 검토된 예제만 공개
+.env
+.env.*
+!/.env.example
+*.local.*
+*secret*
+*credentials*
+local.settings.json
+
+# Azure 배포 상태와 실제 파라미터
+.azure/
+*.tfstate*
+*.bicepparam
+*.bicepparam.local
+
+# Python 환경·캐시
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Node.js 의존성
+node_modules/
+
+# 운영체제·실행 로그
+.DS_Store
+Thumbs.db
+*.log

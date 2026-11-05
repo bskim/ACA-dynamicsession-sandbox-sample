@@ -1,0 +1,8 @@
+using '../dynamic-sessions/main.bicep'
+
+param poolName = '<SESSION_POOL_NAME>'
+param location = '<AZURE_LOCATION>'
+param containerType = 'PythonLTS'
+param cooldownPeriodInSeconds = 300
+param maxConcurrentSessions = 10
+param readySessionInstances = 0

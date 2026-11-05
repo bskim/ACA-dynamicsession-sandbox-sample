@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aca-agent-sample"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+  "azure-containerapps-sandbox==0.1.0b4",
+  "azure-identity>=1.27.0",
+  "openai>=3.42.1",
+  "httpx>=0.28.1",
+  "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8.0.0"]
+
+[project.scripts]
+aca-agent-sample = "aca_agent_sample.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

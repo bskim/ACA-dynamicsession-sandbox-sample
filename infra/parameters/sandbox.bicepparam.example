@@ -1,0 +1,7 @@
+using '../sandbox/main.bicep'
+
+param sandboxGroupName = '<YOUR_SANDBOX_GROUP_NAME>'
+param location = '<YOUR_AZURE_REGION>'
+param tags = {
+  purpose: '<YOUR_PURPOSE>'
+}
