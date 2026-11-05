@@ -20,6 +20,16 @@
 
 설치된 CLI와 서버 프로그램을 포함한 골든 스냅샷은 서로 다른 에이전트가 사용할 sandbox clone의 기반이 될 수 있고, 기존 sandbox는 stop/resume할 수 있습니다. 공개 clone 예제의 `clone_provision_count=0`은 새 clone에서 설치된 도구를 재사용했음을 보여 줍니다. 여러 에이전트를 연결하려면 별도 라우팅·소유권·보안 제어가 필요하며, 도구·게스트 설정·인터페이스가 바뀌면 스냅샷을 갱신해야 할 수 있습니다.
 
+### ACA Sandbox의 에이전트 배치 및 인증 처리 3가지 패턴
+
+ACA Sandbox를 활용할 때 에이전트(LLM 호출 루프)를 어디에 배치하고 외부 모델 API 자격 증명을 어떻게 처리할지에 따라 다음 세 가지 패턴으로 구분할 수 있습니다.
+
+| 아키텍처 패턴 | 에이전트(LLM 루프) 위치 | 인증 키·토큰 보관 위치 | 주요 동작 방식 및 적합한 시나리오 |
+| :--- | :--- | :--- | :--- |
+| **패턴 1: 외부 에이전트 + 내부 범용 툴 Sandbox**<br>*(본 샘플 저장소 구조)* | 호스트 (외부 백엔드) | 호스트에만 존재<br>(샌드박스는 인바운드 `exec`만 수행) | - 호스트가 모델을 호출하고, 샌드박스에는 범용 CLI와 로컬 도구 서버만 설치해 원격 실행합니다.<br>- 샌드박스의 외부 아웃바운드(Egress)를 차단해도 LLM 연동이 가능하며, 에이전트 프롬프트·모델 변경 시 샌드박스 이미지나 스냅샷을 재빌드할 필요가 없습니다. |
+| **패턴 2: 내장 에이전트 프리셋 (`copilot` / `claude`) + Provider Credentials** | 샌드박스 내부 | Sandbox Group에 등록 후 부팅 시 게스트 내부에 주입 (`ANTHROPIC_API_KEY` 등) | - 플랫폼이 제공하는 `copilot`(GitHub Copilot CLI 내장) 또는 `claude`(Claude Code CLI 내장) 디스크 이미지와 포털의 AI Provider Credentials(Fine-grained PAT `github_pat_...` 또는 `sk-ant-...` 키)를 사용합니다.<br>- 기성 코딩 에이전트 CLI를 가장 빠르게 구동할 때 편리하지만, 게스트 런타임에 토큰이 로드되며 토큰 회전 시 실행 중인 샌드박스를 재시작해야 합니다. |
+| **패턴 3: 내부 에이전트 + Egress Proxy `Transform` 헤더 주입** | 샌드박스 내부 | 게스트 바깥의 Egress Proxy<br>(`secretRef` / `managedIdentityRef`) | - 에이전트 프로세스를 샌드박스 안에서 실행하되, 실제 API 키(Sandbox Group Secret)나 Managed Identity 토큰은 게스트 환경 변수에 넣지 않습니다.<br>- 샌드박스 내부 코드가 외부 LLM API로 요청을 보내면 게스트 바깥의 Egress Proxy가 `Transform` 규칙으로 `Authorization` 헤더를 주입하므로, 게스트 내부 코드에 실제 자격 증명 값을 노출하지 않고 내부 에이전트를 구동할 수 있습니다. ([Egress 정책 상세](https://learn.microsoft.com/ko-kr/azure/container-apps/sandboxes-egress-policies)) |
+
 ## 대안 A / B 및 선택 트레이드오프
 
 A(`Dynamic Sessions`)는 `Microsoft.App/sessionPools`의 PythonLTS 또는 Shell 세션으로 요청 `identifier`를 라우팅합니다. 호출 측에서는 `identifier` 문자열 하나만 관리하면 세션 풀이 할당·라우팅·유휴 만료 정리를 자동으로 처리하므로 구현이 매우 단순합니다. 대신 원하는 시점에 세션을 일시 중지(`stop`)했다가 재개(`resume`)하거나 상태를 스냅샷으로 찍어 복제(`clone`)할 수는 없으며, 유휴 시간이 지나면 상태가 사라집니다.
