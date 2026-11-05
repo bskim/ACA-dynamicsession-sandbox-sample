@@ -2,7 +2,7 @@
 
 # Azure Container Apps agent sandbox sample
 
-Run untrusted model-generated code and commands in isolated execution environments rather than on the local host. A trusted local Python CLI orchestrator validates Microsoft Foundry model tool calls and forwards them to the selected Azure execution path. This is a single-user **sample**, not a production security boundary or multi-tenant solution. Preview APIs and services can change. Documentation as of 2026-11-05; actual Azure validation and costs depend on your environment.
+Run model-generated code and commands in isolated execution environments. A trusted local Python CLI orchestrator validates Microsoft Foundry model tool calls and forwards them to the selected Azure execution path. This single-user sample requires additional security controls for service or multi-tenant use. Preview APIs and services can change. Documentation as of 2026-11-05.
 
 ## Architecture and selection
 
@@ -21,7 +21,7 @@ A and B are independent alternatives. Only model-backed examples require Foundry
 
 ## Validation scope
 
-In addition to offline examples and Foundry + simulated-backend integration, six examples, TTL expiry, and three samples per mode were verified in actual Azure on 2026-11-05. Results are observations for that preview version and environment, not a performance or universal success guarantee. Sandbox Bicep deployed successfully despite the local BCP081 schema warning. Fresh installation/sign-in, actual setup-wrapper deployment and all CLI live dispatches were not rerun in that live session. [Deployment, execution and cleanup How-To](docs/how-to-deploy-and-run-en.md)
+On 2026-11-05, six examples, TTL expiry and three samples per mode were verified in Azure, alongside offline examples and Foundry integration with a simulated backend. Sandbox Bicep deployed successfully despite the local BCP081 schema warning. [Deployment, execution and cleanup How-To](docs/how-to-deploy-and-run-en.md)
 
 | Actual live scenario | Observed result |
 | --- | --- |
@@ -32,7 +32,7 @@ In addition to offline examples and Foundry + simulated-backend integration, six
 | Memory/Disk comparison | 3 samples each passed; installed CLI tools and files retained in both, RAM tool-server continuity only in Memory; mean worker-ready 421.253/938.684 ms ([full tables](docs/snapshot-comparison-en.md)) |
 | Explicit snapshot clone | snapshot-time hash matched; zero clone tool reinstallations (`clone_provision_count=0`) and state independent after source modification ([details](docs/sandbox-en.md)) |
 
-After TTL the same ID points to a new empty session, not restored old state. Memory/Disk timings are small-sample client observations including polling, not an SLA; Disk worker-ready includes restart. Zero remaining resources does not mean zero charges.
+After TTL expiry, the same ID is assigned a new empty session. Memory/Disk timings are client observations that include polling; Disk worker-ready includes restart. Check Cost Management for execution and snapshot charges.
 
 ## Prerequisites and configuration
 
@@ -45,9 +45,9 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 .\scripts\preflight.ps1
 ```
 
-Enter your own values only in `.env`; do not share or commit it. Set common `AZURE_SUBSCRIPTION_ID`, `AZURE_TENANT_ID`, `AZURE_LOCATION`, and settings for the chosen example. The loader rejects **all** `<...>` placeholders, including unused settings: clear unused values to empty strings. `FOUNDRY_OPENAI_BASE_URL` is an inference URL ending in `/openai/v1/`, not the project endpoint. Set `FOUNDRY_MODEL_DEPLOYMENT` to your actual deployment name. Dynamic Sessions needs `DYNAMIC_SESSIONS_RESOURCE_GROUP` and the actual pool's `DYNAMIC_SESSIONS_POOL_ENDPOINT`; Sandbox needs `SANDBOX_RESOURCE_GROUP` and `SANDBOX_GROUP_NAME`.
+Enter your own values only in `.env`; do not share or commit it. Set common `AZURE_SUBSCRIPTION_ID`, `AZURE_TENANT_ID`, `AZURE_LOCATION`, and settings for the chosen example. The loader rejects all `<...>` placeholders, including unused settings: clear unused values to empty strings. `FOUNDRY_OPENAI_BASE_URL` is an inference URL ending in `/openai/v1/`, not the project endpoint. Set `FOUNDRY_MODEL_DEPLOYMENT` to your actual deployment name. Dynamic Sessions needs `DYNAMIC_SESSIONS_RESOURCE_GROUP` and the actual pool's `DYNAMIC_SESSIONS_POOL_ENDPOINT`; Sandbox needs `SANDBOX_RESOURCE_GROUP` and `SANDBOX_GROUP_NAME`.
 
-Before live execution sign in to Azure CLI with the correct tenant and subscription, and check the Foundry inference role (for example `Cognitive Services OpenAI User`), `Azure ContainerApps Session Executor` at pool scope, and `Container Apps SandboxGroup Data Owner` at sandbox group scope, respectively. Provisioning and role assignment need separate administrative permissions; propagation can take time. Actual Azure calls require **both** `ENABLE_LIVE_AZURE=true` in `.env` and `--live` on each example. Check cost, quota, and regional availability first. No automatic retries duplicate execution.
+Before live execution sign in to Azure CLI with the correct tenant and subscription, and check the Foundry inference role (for example `Cognitive Services OpenAI User`), `Azure ContainerApps Session Executor` at pool scope, and `Container Apps SandboxGroup Data Owner` at sandbox group scope, respectively. Provisioning and role assignment need separate administrative permissions; propagation can take time. Actual Azure calls require both `ENABLE_LIVE_AZURE=true` in `.env` and `--live` on each example. Check cost, quota, and regional availability first. Calls are not automatically retried, to avoid duplicate execution.
 
 ## Part 1: Dynamic Sessions coding agent
 
@@ -62,7 +62,7 @@ $env:ENABLE_PROVISIONING = 'true'
 .\scripts\setup-dynamic-sessions.ps1 -SubscriptionId 'YOUR_SUBSCRIPTION_ID' -ResourceGroupName 'YOUR_DEMO_RESOURCE_GROUP' -PoolName 'YOUR_POOL_NAME' -Location 'YOUR_AZURE_REGION'
 ```
 
-Copy the pool's returned `poolManagementEndpoint` into your private `.env` and grant the runtime role. Shell needs a separate `-ContainerType Shell` pool and its endpoint. The following are **offline simulations** by default.
+Copy the pool's returned `poolManagementEndpoint` into your private `.env` and grant the runtime role. Shell needs a separate `-ContainerType Shell` pool and its endpoint. The following are offline simulations by default.
 
 ```powershell
 .\.venv\Scripts\python.exe examples\dynamic_sessions\session_reuse.py
@@ -70,7 +70,7 @@ Copy the pool's returned `poolManagementEndpoint` into your private `.env` and g
 .\.venv\Scripts\python.exe examples\dynamic_sessions\shell_agent.py
 ```
 
-The first verifies ID A's memory variables and file, isolation of ID B, and simulated expiry. The second verifies create → failing test → repair → passing test from actual tool results. The third sets the working directory for each Shell execution. For live examples append `--live` and enable the opt-in above. Run expiry separately using `session_reuse.py --live --wait-for-ttl SECONDS`, choosing a time sufficiently greater than the pool cooldown. Waiting may incur costs and a short wait fails. `state_lost` is an application observation, not an official Azure error code.
+The first verifies ID A's memory variables and file, isolation of ID B, and simulated expiry. The second verifies create → failing test → repair → passing test from actual tool results. The third sets the working directory for each Shell execution. For live examples append `--live` and enable the opt-in above. Run expiry separately using `session_reuse.py --live --wait-for-ttl SECONDS`, choosing a time sufficiently greater than the pool cooldown. Waiting may incur costs and a short wait fails. The sample returns `state_lost` when it detects session expiry.
 
 ## Part 2: Sandbox command execution and snapshots
 
@@ -84,11 +84,11 @@ The external agent comprises a policy orchestrator on the trusted host and a rem
 2. The model uses the prompt's tool catalog to compose shell commands in a single `run_sandbox_command` function call.
 3. The host validates the arguments, forwards the command through the SDK to its own sandbox, and returns the result to the model.
 
-The string checks are not a security boundary preventing all access outside `/workspace`. See the [detailed three-stage explanation](docs/sandbox-en.md#exposing-and-invoking-tools-for-an-external-agent-three-stages) for actual behavior and limitations.
+String checks require separate filesystem and egress controls to restrict working directories and shell commands. See the [detailed three-stage explanation](docs/sandbox-en.md#exposing-and-invoking-tools-for-an-external-agent-three-stages) for actual behavior and limitations.
 
-**Decoupled update lifecycles:** prompts, models, and orchestration logic are not baked into the image/snapshot, so compatible agent changes do not require sandbox recreation. A golden snapshot containing installed CLIs and the server program can be reused for clones serving different agents, while an existing instance can be stopped/resumed. The sample's `clone_provision_count=0` means no tools were reinstalled in the clone, not that multi-agent connections or authorization isolation are already implemented. Guest tool or contract changes may require a snapshot update. [Design and limitations](docs/sandbox-en.md#decoupling-agent-and-sandbox-update-lifecycles)
+Separate agent and sandbox update lifecycles allow compatible prompt, model and orchestration changes without recreating the sandbox. A golden snapshot containing installed CLIs and the server program can be reused for clones serving different agents, while an existing instance can be stopped and resumed. The sample’s `clone_provision_count=0` shows that the clone reused installed tools. Multi-agent connections require routing and authorization controls; guest tool or contract changes may require a snapshot update. [Design and limitations](docs/sandbox-en.md#decoupling-agent-and-sandbox-update-lifecycles)
 
-`infra/sandbox/main.bicep` and `scripts/setup-sandbox.ps1` deploy a sandbox group in an **existing demo resource group**. The default is a dry run; actual deployment requires both `-Execute` and the PowerShell environment variable `ENABLE_PROVISIONING=true`.
+`infra/sandbox/main.bicep` and `scripts/setup-sandbox.ps1` deploy a sandbox group in an existing demo resource group. The default is a dry run; actual deployment requires both `-Execute` and the PowerShell environment variable `ENABLE_PROVISIONING=true`.
 
 ```powershell
 $env:ENABLE_PROVISIONING = 'true'
@@ -102,9 +102,9 @@ $env:ENABLE_PROVISIONING = 'true'
 | Installed external CLI tools (git/jq/sqlite3/agent-tool) | Preserved — no reinstallation | Preserved — no reinstallation |
 | RAM and processes | Preserved after resume | Lost; VM and worker restart |
 | Workload readiness | Verify the existing worker | Explicit post-resume bootstrap included |
-| Data Disk volume | **Unsupported when attached** | Supported mode |
+| Data Disk volume | Unsupported when attached | Supported mode |
 
-Resume latency has distinct Running, first exec, and worker-readiness stages; it is not LLM response time. Do not assume Memory is always faster or guarantees a particular latency. External connections and tokens require revalidation.
+Resume latency is measured separately for Running, first exec and worker readiness. Consider the observed timings for each stage and revalidate external connections and tokens.
 
 ```powershell
 .\.venv\Scripts\python.exe examples\sandbox\command_agent.py
@@ -112,7 +112,7 @@ Resume latency has distinct Running, first exec, and worker-readiness stages; it
 .\.venv\Scripts\python.exe examples\sandbox\snapshot_clone.py
 ```
 
-Runs are simulated by default. `command_agent.py --live` connects to Foundry for remote commands and stop/resume. The comparison uses `state_worker.py`'s RAM nonce/counter and disk SHA-256 oracle and reports stage timings. `--live` incurs actual costs; keep raw observations from `--output-dir` in a private directory. Clone creates a **different** sandbox from a named snapshot and verifies independence from subsequent source changes. It is not resuming the same sandbox.
+Runs are simulated by default. `command_agent.py --live` connects to Foundry for remote commands and stop/resume. The comparison uses `state_worker.py`’s RAM nonce/counter and disk SHA-256 oracle and reports stage timings. `--live` incurs actual costs; keep raw observations from `--output-dir` in a private directory. Clone creates a separate sandbox from a named snapshot and verifies independence from subsequent source changes.
 
 ## Unified CLI
 
@@ -136,7 +136,7 @@ From the source checkout, these CLI commands run the same examples and forward t
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check-public-readiness.ps1 -RequireDocs
 ```
 
-Examples attempt to clean up sandboxes and snapshots they create; check the private recovery manifest on failure. Cleanup deletes only run-owned resources listed in the manifest, not groups or Foundry. Setup-created pools and groups are not automatically written to the manifest: separately identify and delete only your own resources in Azure. Check remaining snapshots, volumes, and storage costs. Git ignore is not a security boundary; independently inspect staged files and all history. [Security](SECURITY-en.md) · [Troubleshooting](docs/troubleshooting-en.md)
+Examples attempt to clean up sandboxes and snapshots they create; check the private recovery manifest on failure. Cleanup deletes only run-owned resources listed in the manifest and leaves groups and Foundry intact. Setup-created pools and groups are not automatically written to the manifest: separately identify and delete only your own resources in Azure. Check remaining snapshots, volumes, and storage costs. Independently inspect staged files and all history as well as Git ignore rules. [Security](SECURITY-en.md) · [Troubleshooting](docs/troubleshooting-en.md)
 
 ## Official documentation
 

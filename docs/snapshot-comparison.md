@@ -20,8 +20,7 @@
 .\.venv\Scripts\python.exe -m pytest tests\unit
 ```
 
-CLI는 기본적으로 오프라인이며 `--live`와 `ENABLE_LIVE_AZURE=true`로 실제 Azure를 사용한다. fake의 지연 시간은 호스트 시뮬레이터 실행 시간이며,
-Azure 성능 수치가 아니다. JSON/CSV의 `simulated` 필드로 구분한다.
+CLI는 기본적으로 오프라인이며 `--live`와 `ENABLE_LIVE_AZURE=true`로 실제 Azure를 사용한다. fake 지연 시간은 호스트 시뮬레이터 실행 시간이며 JSON/CSV의 `simulated` 필드로 구분한다.
 각 반복은 같은 설정의 새 샌드박스를 사용하며, 모드 순서는 교차한다.
 
 ## 증거와 합격 조건
@@ -73,14 +72,12 @@ README의 Sandbox 설정과 RBAC를 준비하고, 이미지에서 `python3`의 �
 `SandboxLifecycleComparator(adapter).run(...)`에 명시적으로 활성화된
 `AcaSandboxAdapter`를 주입할 수 있다. 기존 설정/인증 계약을 따르고 private
 manifest를 지정한다. 동일 이미지/CPU/메모리/리전 설정을 유지해야 한다.
-기본 `ubuntu` 이미지에 `python3`가 있다고 가정하지 않는다. 이미지 준비와
-Python 존재를 먼저 검증한다. 현재 모듈은 측정 전에 git/jq/sqlite3와 커스텀 CLI·설정을 실제 설치하며 Ubuntu 패키지 저장소 접근이 필요하다.
+실행 전에 기본 `ubuntu` 이미지의 `python3` 설치 여부를 먼저 확인한다. 현재 모듈은 측정 전에 git/jq/sqlite3와 커스텀 CLI·설정을 실제 설치하며 Ubuntu 패키지 저장소 접근이 필요하다.
 
 모드 정책과 auto-delete 비활성화를 재조회하며, Memory 비교에는 볼륨을
 연결하지 않는다. backing type을 증명할 수 없는 볼륨도 보수적으로 거부한다.
-SDK polling 간격·네트워크를 포함한 호스트 관측값이므로 플랫폼 고유 지연이나
-sub-second SLO로 해석하지 않는다. 실험 결과와 적용 범위는 아래에 제시한다.
-원시 관찰값은 공개 문서가 아닌 `.internal\results\`에 보관한다.
+호스트 관측값에는 SDK polling 간격과 네트워크 시간이 포함된다. 실험 결과와 적용 범위는 아래에 제시한다.
+원시 관찰값은 비공개 `.internal\results\`에 보관한다.
 
 
 ## 실제 툴체인·인덱스 서버 결과 (2026-11-05)
@@ -96,7 +93,7 @@ sub-second SLO로 해석하지 않는다. 실험 결과와 적용 범위는 아�
 | Memory | 3 | true | true | true | false | 9503.373 | 1284.911 | 224.748 | 451.825 |
 | Disk | 3 | true | true | false | true | 6790.159 | 1437.641 | 205.635 | 987.945 |
 
-모드별 표본은 3개뿐이다. SDK polling을 포함한 클라이언트 관측값이며 SLA나 일반적인 성능 우열로 확대하지 않는다.
+모드별 표본은 3개이며 SDK polling을 포함한 클라이언트 관측값이다.
 
 
 단계별 성공 표본 집계 (ms; p95는 nearest-rank):
@@ -114,7 +111,7 @@ sub-second SLO로 해석하지 않는다. 실험 결과와 적용 범위는 아�
 
 ## 아키텍처 해석
 
-- **설치 도구와 디스크**: `installed_tool_preserved=true`와 `disk_preserved=true`는 두 모드 모두 유지되는 루트 파일시스템에 `git`, `jq`, `sqlite3`, `agent-tool`과 설정이 설치되기 때문이다. 재개 후 재설치 없이 실행하며 sentinel만으로는 도구 보존을 증명하지 않는다.
+- **설치 도구와 디스크**: `installed_tool_preserved=true`와 `disk_preserved=true`는 두 모드 모두 유지되는 루트 파일시스템에 `git`, `jq`, `sqlite3`, `agent-tool`과 설정이 설치되기 때문이다. 재개 후 재설치 없이 설치된 도구를 직접 실행해 보존 상태를 확인한다.
 - **Memory**: `memory_preserved=true`, `worker_restarted=false`. 기존 루프백 서버와 RAM 인덱스, nonce, 버퍼 체크섬, 프로세스 지문 및 카운터 증가가 연속성을 증명한다. `worker_ready_ms` 평균은 421.253ms다.
-- **Disk**: `memory_preserved=false`, `worker_restarted=true`. VM·프로세스 RAM과 캐시 인덱스는 소실되며 명시적 재기동으로 보존된 프로젝트 파일에서 인덱스를 다시 만든다. `worker_ready_ms` 평균은 938.684ms다. PID 재사용은 연속성 증거가 아니다.
-- `worker_ready_ms`는 첫 exec 이후의 추가 구간이지 전체 재개 시간이 아니며 Disk에서는 서버 부재 확인·재기동을 포함한다. 모드별 세 표본의 p95는 최댓값이다. polling·네트워크·호스트 비용이 포함되므로 SLA, 일반적 성능 우열 또는 비용 우위를 추론하지 않는다. 프로비저닝은 제외했고 Data Disk를 연결하지 않았으며 새 샌드박스 6개가 모두 통과하고 정리됐다.
+- **Disk**: `memory_preserved=false`, `worker_restarted=true`. VM·프로세스 RAM과 캐시 인덱스는 소실되며 명시적 재기동으로 보존된 프로젝트 파일에서 인덱스를 다시 만든다. `worker_ready_ms` 평균은 938.684ms다. 연속성은 PID와 함께 프로세스 지문과 RAM 상태로 판단한다.
+- `worker_ready_ms`는 첫 exec 이후의 추가 구간이며 Disk에서는 서버 부재 확인·재기동을 포함한다. 모드별 세 표본의 p95는 최댓값이다. 측정에는 polling·네트워크·호스트 비용이 포함된다. 프로비저닝은 제외했고 Data Disk를 연결하지 않았으며 새 샌드박스 6개가 모두 통과하고 정리됐다.

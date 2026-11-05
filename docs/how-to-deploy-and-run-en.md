@@ -2,9 +2,9 @@
 
 # Deployment, execution and cleanup How-To (Windows PowerShell)
 
-This guide deploys PythonLTS, optional Shell, and Sandbox in a **dedicated test resource group** and removes them afterwards. Deployment, execution, waiting and Foundry inference may incur charges. Never modify or delete existing Foundry or other users' resources. Replace `<YOUR_...>` yourself; keep actual values, tokens and results private. The paths are independent: skip unneeded pools/groups and their variables and roles.
+This guide deploys PythonLTS, optional Shell, and Sandbox in a dedicated test resource group and removes them afterwards. Deployment, execution, waiting and Foundry inference may incur charges. Never modify or delete existing Foundry or other users' resources. Replace `<YOUR_...>` yourself; keep actual values, tokens and results private. The paths are independent: skip unneeded pools/groups and their variables and roles.
 
-Six examples, TTL and three samples per mode were verified in real Azure on 2026-11-05. Fresh clone/venv installation, interactive sign-in, actual setup-wrapper deployment and all CLI live dispatches were not rerun then. The validated scope was subscription deployment referencing the Bicep sources and direct live execution of example files. APIs are preview and behavior depends on region, permissions and versions.
+Six examples, TTL and three samples per mode were verified in Azure on 2026-11-05, using subscription deployment referencing the Bicep sources and direct live execution of example files. APIs are preview and behavior depends on region, permissions and versions.
 
 ## Step 1: Prepare
 
@@ -29,9 +29,9 @@ az containerapp sessionpool create --help
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 ```
 
-The recorded environment was Python 3.14.7 / Azure CLI 2.91.0 / local containerapp extension 1.3.0b5 / sandbox SDK 0.1.0b4. The extension-install command can select a newer preview; verify its version and wire contract rather than assuming this run validates later versions. Verify Bicep availability with `az bicep version` and install it with `az bicep install` if missing.
+The recorded environment was Python 3.14.7 / Azure CLI 2.91.0 / local containerapp extension 1.3.0b5 / sandbox SDK 0.1.0b4. The extension-install command can select a newer preview; verify the installed version and wire contract. Verify Bicep availability with `az bicep version` and install it with `az bicep install` if missing.
 
-Set your own `AZURE_SUBSCRIPTION_ID`, `AZURE_TENANT_ID`, `AZURE_LOCATION`, `FOUNDRY_OPENAI_BASE_URL=https://<YOUR_FOUNDRY_ACCOUNT>.openai.azure.com/openai/v1/`, existing `FOUNDRY_MODEL_DEPLOYMENT`, `FOUNDRY_API_MODE=chat_completions`, and `FOUNDRY_TOKEN_SCOPE=https://ai.azure.com/.default` in `.env`. The OpenAI inference URL is not the project endpoint. Replace or clear remaining `<...>` placeholders **including unused fields**. Never store secret keys or access tokens. `.env` is Git-ignored, not encrypted. Verify the local account and tenant; process environment variables override `.env`.
+Set your own `AZURE_SUBSCRIPTION_ID`, `AZURE_TENANT_ID`, `AZURE_LOCATION`, `FOUNDRY_OPENAI_BASE_URL=https://<YOUR_FOUNDRY_ACCOUNT>.openai.azure.com/openai/v1/`, existing `FOUNDRY_MODEL_DEPLOYMENT`, `FOUNDRY_API_MODE=chat_completions`, and `FOUNDRY_TOKEN_SCOPE=https://ai.azure.com/.default` in `.env`. The OpenAI inference URL is not the project endpoint. Replace or clear remaining `<...>` placeholders including unused fields. Never store secret keys or access tokens. `.env` is Git-ignored, not encrypted. Verify the local account and tenant; process environment variables override `.env`.
 
 ```powershell
 .\.venv\Scripts\aca-agent-sample.exe preflight config-check
@@ -59,7 +59,7 @@ az group create --subscription $sub --name $rg --location $location --output non
 if ($LASTEXITCODE -ne 0) { throw 'RG creation failed.' }
 ```
 
-Before the recorded run, `SessionPools` was `0/50` and `SandboxCores` was `0/300`; these are not your subscription limits. Do not attach a Data Disk volume for the Memory comparison.
+Before the recorded run, shared subscription usage was `SessionPools 0/50` and `SandboxCores 0/300`. Leave Data Disk volumes unattached for the Memory comparison.
 
 ### Option A: Direct Bicep deployment
 
@@ -74,7 +74,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Sandbox group deployment failed.' }
 az resource list --subscription $sub -g $rg --query '[].{name:name,type:type,location:location}' -o json
 ```
 
-Pool `maxConcurrentSessions` must be **5–600** and differs from preallocated `readySessionInstances`. Too many concurrent sessions may cause 429. The `Microsoft.App/sandboxGroups@2026-07-01` template contains `properties: {}`, required in the live deployment. A local `BCP081` type warning is separate from service acceptance. This configuration does not require a Managed Environment.
+Pool `maxConcurrentSessions` must be 5–600 and differs from preallocated `readySessionInstances`. Too many concurrent sessions may cause 429. The `Microsoft.App/sandboxGroups@2026-07-01` template contains `properties: {}`, required in the live deployment. A local `BCP081` type warning is separate from service acceptance. This configuration does not require a Managed Environment.
 
 ### Option B: Setup scripts (instead of A)
 
@@ -95,7 +95,7 @@ try {
 
 ### Data-plane roles and endpoints
 
-Create role assignments for option A only. Role definition IDs are public built-in role IDs, not user identifiers. For a service principal, use its correct object ID and principal type instead of `User`.
+Create role assignments for option A only. Role definition IDs are public built-in role IDs. For a service principal, use its correct object ID and principal type instead of `User`.
 
 ```powershell
 $pythonScope = "/subscriptions/$sub/resourceGroups/$rg/providers/Microsoft.App/sessionPools/$pythonPool"
@@ -120,7 +120,7 @@ if ($LASTEXITCODE -ne 0 -or -not $shellEndpoint) { throw 'Shell endpoint unavail
 
 ### Existing Foundry inference permission
 
-The account-scoped `Cognitive Services OpenAI User` role is separate from the Session/Sandbox roles. Have the account administrator verify the correct runtime identity's existing or inherited inference permission. The recorded live run reused existing permission; it did not alter Foundry. The optional block below makes no assignment by default. Only enable it if the role is missing and an authorized administrator approves. Keep this account scope separate from the dedicated cleanup `$rg`; never delete the existing Foundry group. A role listing does not prove inference propagation: the model-backed live examples verify actual access.
+The account-scoped `Cognitive Services OpenAI User` role is separate from the Session/Sandbox roles. Have the account administrator verify the correct runtime identity's existing or inherited inference permission. The recorded live run reused existing permission; it did not alter Foundry. The optional block below makes no assignment by default. Only enable it if the role is missing and an authorized administrator approves. Keep this account scope separate from the dedicated cleanup `$rg`; never delete the existing Foundry group. The model-backed live examples verify actual inference access.
 
 ```powershell
 $foundryScope = '<YOUR_EXISTING_FOUNDRY_ACCOUNT_ARM_ID>'
@@ -160,7 +160,7 @@ foreach ($key in $values.Keys) {
 ```
 
 
-If no active session ID exists, **after** mapping `.env`, generate an unpredictable ID and explicitly run the example once as follows, then perform the GET polling below. Investigate failures rather than automatically repeating requests with unknown outcomes. Keep the generated ID and example console output private.
+If no active session ID exists, after mapping `.env`, generate an unpredictable ID and explicitly run the example once as follows, then perform the GET polling below. Investigate failures rather than automatically repeating requests with unknown outcomes. Keep the generated ID and example console output private.
 
 ```powershell
 $existingSessionIdentifier = [guid]::NewGuid().ToString('N')
@@ -170,7 +170,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Live session check failed; inspect the error b
 
 ### Verify data-plane propagation
 
-A role listing or successful token issuance does not prove data-plane propagation. Use the following GET only for an **existing live** test session identifier. If there is none, explicitly try a single live run in step 3 and check success; do not automatically repeat an indeterminate POST. A new or expired identifier can produce 404 independently of RBAC. Check Sandbox access with the read-only list GET below or successful actual create/exec. Stop and investigate authentication/ID for 401/404 and other errors; poll only 403 within a deadline. The permissions needed to observe propagation may differ by configuration.
+Verify data-plane propagation using the following GET with an existing live test session identifier. If there is none, explicitly try a single live run in step 3 and check success; do not automatically repeat an indeterminate POST. A new or expired identifier can produce 404 independently of RBAC. Check Sandbox access with the read-only list GET below or successful actual create/exec. Stop and investigate authentication/ID for 401/404 and other errors; poll only 403 within a deadline. The permissions needed to observe propagation may differ by configuration.
 
 ```powershell
 # Use an existing, still-active identifier you own (after mapping .env above).
@@ -208,7 +208,7 @@ $py = '.\.venv\Scripts\python.exe'
 & $py .\examples\sandbox\snapshot_clone.py
 ```
 
-Live execution requires **both** `ENABLE_LIVE_AZURE=true` in `.env` and `--live`. Keep raw results and manifests private; never share session identifiers or nonces. The TTL experiment waits 330 seconds for a pool with a 300-second cooldown and can incur extra charges. Only Shell temporarily uses its separate endpoint.
+Live execution requires both `ENABLE_LIVE_AZURE=true` in `.env` and `--live`. Keep raw results and manifests private; never share session identifiers or nonces. The TTL experiment waits 330 seconds for a pool with a 300-second cooldown and can incur extra charges. Only Shell temporarily uses its separate endpoint.
 
 ```powershell
 & $py .\examples\dynamic_sessions\session_reuse.py --live
@@ -226,7 +226,7 @@ finally {
 & $py .\examples\sandbox\snapshot_clone.py --live
 ```
 
-The installed CLI can run the same examples. Apply the same endpoint override above to the Shell command. The recorded live evidence is from direct example-file execution, not every live CLI dispatch.
+The installed CLI can run the same examples. Apply the same endpoint override above to the Shell command.
 
 ```powershell
 .\.venv\Scripts\aca-agent-sample.exe dynamic-session reuse --live
@@ -252,14 +252,14 @@ finally {
 
 ## Step 4: Cleanup and configuration restoration
 
-Examples attempt to clean up their own sandboxes/snapshots. On failure, select that run's private manifest and inspect the dry run before deleting. Setup-created resources are not automatically included in a manifest. Accepted deletion requests are not the same as confirmed deletion.
+Examples attempt to clean up their own sandboxes/snapshots. On failure, select that run's private manifest and inspect the dry run before deleting. Setup-created resources are not automatically included in a manifest. After requesting deletion, verify that it has completed.
 
 ```powershell
 .\scripts\cleanup.ps1 -ManifestPath '.internal\runs\<YOUR_RUN_MANIFEST>.json'
 .\scripts\cleanup.ps1 -ManifestPath '.internal\runs\<YOUR_RUN_MANIFEST>.json' -Execute -Confirm:$false
 ```
 
-For a Session-only deployment, skip the Sandbox list loop below; do not query an undeployed group. Check the data-plane sandbox/snapshot lists before deleting the group. The following **permanently deletes the entire group created and owned for this exercise**. Never target the existing Foundry group. Review the actual `$rg` and `$sub` targets again before execution.
+For a Session-only deployment, skip the Sandbox list loop below; do not query an undeployed group. Check the data-plane sandbox/snapshot lists before deleting the group. The following permanently deletes the entire group created and owned for this exercise. Never target the existing Foundry group. Review the actual `$rg` and `$sub` targets again before execution.
 
 ```powershell
 # Data-plane lists before RG deletion; inspect private output for remaining IDs.
@@ -286,7 +286,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Remaining role lookup failed.' }
 az rest --method get --url "https://management.azure.com/subscriptions/$sub/providers/Microsoft.App/locations/$location/usages?api-version=2025-01-01" --query 'value[?contains(name.value, `Session`) || contains(name.value, `Sandbox`)].{name:name.value,current:currentValue,limit:limit}' -o json
 ```
 
-List roles at subscription scope and filter rather than querying a deleted resource scope. Session/sandbox quota is **shared subscription-wide**, so usage can remain nonzero due to other workloads. In the recorded run, resources and role assignments were zero and `SessionPools` returned to `0/50`, `SandboxCores` to `0/300`. Those are not targets or limits for every environment.
+List roles at subscription scope and filter them. Session/sandbox quota is shared subscription-wide, so usage can remain nonzero due to other workloads. In the recorded run, resources and role assignments were zero and `SessionPools` returned to `0/50`, `SandboxCores` to `0/300`.
 
 Keep the original Foundry settings and clear only temporary fields. If the file previously held other resource settings, restore your private original instead, then set both opt-ins to false. Remove process overrides too.
 
@@ -302,4 +302,4 @@ foreach ($key in @('DYNAMIC_SESSIONS_RESOURCE_GROUP','DYNAMIC_SESSIONS_POOL_ENDP
 Remove-Item Env:ENABLE_LIVE_AZURE, Env:ENABLE_PROVISIONING, Env:DYNAMIC_SESSIONS_POOL_ENDPOINT -ErrorAction SilentlyContinue
 ```
 
-**Zero remaining resources does not mean zero charges.** Cost Management aggregation can be delayed; prior execution, snapshot and inference charges from a separate Foundry resource group can appear later. Check both cost scopes later. [Troubleshooting](troubleshooting-en.md) · [Security](../SECURITY-en.md) · [Sandbox costs](https://sandboxes.azure.com/docs/sandboxes/cost). The Sandbox site has no locale-specific path and some Korean Learn pages may display English.
+Cost Management aggregation can be delayed; prior execution, snapshot and inference charges from a separate Foundry resource group can appear later. Check both cost scopes. [Troubleshooting](troubleshooting-en.md) · [Security](../SECURITY-en.md) · [Sandbox costs](https://sandboxes.azure.com/docs/sandboxes/cost). The Sandbox site has no locale-specific path and some Korean Learn pages may display English.

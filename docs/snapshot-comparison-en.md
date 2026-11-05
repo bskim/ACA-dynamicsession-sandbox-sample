@@ -20,8 +20,7 @@ No public port or external connection is required.
 .\.venv\Scripts\python.exe -m pytest tests\unit
 ```
 
-The CLI defaults to offline; `--live` with `ENABLE_LIVE_AZURE=true` uses Azure. Fake latency is host simulator execution time, not an
-Azure benchmark; JSON/CSV identify it with `simulated`. Each repetition uses a
+The CLI defaults to offline; `--live` with `ENABLE_LIVE_AZURE=true` uses Azure. Fake latency is host simulator execution time; JSON/CSV identify it with `simulated`. Each repetition uses a
 fresh sandbox with identical settings, alternating mode order.
 
 ## Evidence and acceptance
@@ -76,15 +75,12 @@ The default is one iteration per mode, and `--iterations` alternates the Memory/
 
 An explicitly enabled `AcaSandboxAdapter` can be injected into
 `SandboxLifecycleComparator(adapter).run(...)`. Follow the existing configuration/
-authentication contracts and provide a private recovery manifest. Keep image/CPU/
-memory/region identical. Do not assume the default `ubuntu` image has `python3`.
-Verify Python availability outside measurement. The module installs git/jq/sqlite3, custom CLIs and configuration before measurement; Ubuntu package repository access is required.
+authentication contracts and provide a private recovery manifest. Keep image/CPU/memory/region identical, and verify `python3` availability in the `ubuntu` image outside measurement. The module installs git/jq/sqlite3, custom CLIs and configuration before measurement; Ubuntu package repository access is required.
 
 The comparator reads back mode policy and disabled auto-delete. Do not attach
 volumes for Memory comparison; attachments with unverified backing types are also
-conservatively rejected. Host observations include SDK polling and network time;
-they are not intrinsic platform latency or a sub-second SLO. The observed live results and their scope are provided below. Store raw observations
-under private `.internal\results\`, not public documentation.
+conservatively rejected. Host observations include SDK polling and network time. The observed live results and their scope are provided below. Store raw observations
+under private `.internal\results\`.
 
 
 ## Live toolchain and index-server results (2026-11-05)
@@ -100,7 +96,7 @@ All six real Azure samples passed (`simulated=false`). git/jq/sqlite3, custom CL
 | Memory | 3 | true | true | true | false | 9503.373 | 1284.911 | 224.748 | 451.825 |
 | Disk | 3 | true | true | false | true | 6790.159 | 1437.641 | 205.635 | 987.945 |
 
-Only three observations per mode; these client-side measurements include SDK polling and are not an SLA or a general performance ranking.
+The three observations per mode are client-side measurements that include SDK polling.
 
 
 Stage aggregates (ms; p95 is nearest-rank):
@@ -118,7 +114,7 @@ Stage aggregates (ms; p95 is nearest-rank):
 
 ## Architecture interpretation
 
-- **Installed tools and disk**: `installed_tool_preserved=true` and `disk_preserved=true` in both modes because `git`, `jq`, `sqlite3`, `agent-tool`, and their configuration reside on the preserved root filesystem. Both execute after resume without reinstallation; a sentinel alone is insufficient proof.
+- **Installed tools and disk**: `installed_tool_preserved=true` and `disk_preserved=true` in both modes because `git`, `jq`, `sqlite3`, `agent-tool`, and their configuration reside on the preserved root filesystem. Run the installed tools after resume without reinstalling them to verify their preservation.
 - **Memory**: `memory_preserved=true`, `worker_restarted=false`. The existing loopback server and RAM index, nonce, buffer checksum, process fingerprint and advancing counter demonstrate continuity; mean `worker_ready_ms` is 421.253 ms.
-- **Disk**: `memory_preserved=false`, `worker_restarted=true`. The VM/process RAM and cached index do not persist; an explicit restart rebuilds the index from retained project files. Mean `worker_ready_ms` is 938.684 ms. A reused PID is not evidence of continuity.
-- `worker_ready_ms` is the additional interval after first exec, not total resume time; Disk includes detecting and restarting the server. With only three samples per mode, p95 is the maximum of those values. Polling, network and host overhead are included; do not infer an SLA, general performance ranking, or cost advantage. Provisioning was excluded, no Data Disk was attached, and all six new sandboxes passed and were cleaned up.
+- **Disk**: `memory_preserved=false`, `worker_restarted=true`. The VM/process RAM and cached index do not persist; an explicit restart rebuilds the index from retained project files. Mean `worker_ready_ms` is 938.684 ms. Assess continuity using the process fingerprint and RAM state alongside the PID.
+- `worker_ready_ms` measures the additional interval after first exec; Disk includes detecting and restarting the server. With three samples per mode, p95 is the maximum of those values. Polling, network and host overhead are included. Provisioning was excluded, no Data Disk was attached, and all six new sandboxes passed and were cleaned up.

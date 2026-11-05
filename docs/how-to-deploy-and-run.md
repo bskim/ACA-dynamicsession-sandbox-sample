@@ -2,9 +2,9 @@
 
 # 배포·실행·정리 How-To (Windows PowerShell)
 
-이 가이드는 **전용 테스트 리소스 그룹**에서 PythonLTS, 선택 Shell, Sandbox를 배포하고 정리합니다. 실제 배포·실행·대기·Foundry 추론은 비용이 발생할 수 있습니다. 기존 Foundry나 다른 사용자의 리소스를 수정·삭제하지 마세요. `<YOUR_...>`는 사용자가 직접 교체하며 실제 값·토큰·결과는 비공개로 유지합니다. 각 경로는 독립적입니다. 불필요한 풀이나 그룹은 생략하고 해당 변수·역할도 생략하세요.
+이 가이드는 전용 테스트 리소스 그룹에서 PythonLTS, 선택 Shell, Sandbox를 배포하고 정리합니다. 실제 배포·실행·대기·Foundry 추론은 비용이 발생할 수 있습니다. 기존 Foundry나 다른 사용자의 리소스를 수정·삭제하지 마세요. `<YOUR_...>`는 사용자가 직접 교체하며 실제 값·토큰·결과는 비공개로 유지합니다. 각 경로는 독립적입니다. 불필요한 풀이나 그룹은 생략하고 해당 변수·역할도 생략하세요.
 
-2026-11-05에 실제 Azure에서 예제 6종, TTL 및 각 모드 3표본을 검증했습니다. 새 clone/venv 설치, 대화형 로그인, setup wrapper 실배포와 모든 CLI 라이브 dispatch는 그때 다시 실행하지 않았습니다. Bicep 원본을 참조하는 subscription 배포와 예제 파일 직접 라이브 실행이 검증 범위입니다. API는 preview이며 지역·권한·버전에 따라 다릅니다.
+2026-11-05에 실제 Azure에서 예제 6종, TTL 및 각 모드 3표본을 검증했습니다. Bicep 원본을 참조하는 subscription 배포와 예제 파일 직접 라이브 실행을 사용했습니다. API는 preview이며 지역·권한·버전에 따라 다릅니다.
 
 ## 1단계: 사전 준비
 
@@ -29,9 +29,9 @@ az containerapp sessionpool create --help
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 ```
 
-기록된 환경은 Python 3.14.7 / Azure CLI 2.91.0 / 로컬 containerapp 확장 1.3.0b5 / sandbox SDK 0.1.0b4였습니다. 확장 설치 명령은 더 최신 preview를 선택할 수 있으므로 버전과 wire 계약을 확인하고 후속 버전까지 이번 검증이 적용된다고 가정하지 마세요. `az bicep version`으로 Bicep을 확인하고 없으면 `az bicep install`로 설치합니다.
+기록된 환경은 Python 3.14.7 / Azure CLI 2.91.0 / 로컬 containerapp 확장 1.3.0b5 / sandbox SDK 0.1.0b4였습니다. 확장 설치 명령은 더 최신 preview를 선택할 수 있으므로 설치된 버전과 wire 계약을 확인하세요. `az bicep version`으로 Bicep을 확인하고 없으면 `az bicep install`로 설치합니다.
 
-`.env`에 자신의 `AZURE_SUBSCRIPTION_ID`, `AZURE_TENANT_ID`, `AZURE_LOCATION`, `FOUNDRY_OPENAI_BASE_URL=https://<YOUR_FOUNDRY_ACCOUNT>.openai.azure.com/openai/v1/`, 기존 `FOUNDRY_MODEL_DEPLOYMENT`, `FOUNDRY_API_MODE=chat_completions`, `FOUNDRY_TOKEN_SCOPE=https://ai.azure.com/.default`를 설정합니다. OpenAI 추론 URL은 project endpoint가 아닙니다. **미사용 항목을 포함해** 남은 `<...>` placeholder는 자신의 값으로 바꾸거나 비우세요. 비밀키와 액세스 토큰은 저장하지 않습니다. `.env`는 Git 무시 대상이지만 암호화되지 않습니다. 로컬 계정 및 테넌트를 확인하고 프로세스 환경 변수가 `.env`보다 우선함에 유의하세요.
+`.env`에 자신의 `AZURE_SUBSCRIPTION_ID`, `AZURE_TENANT_ID`, `AZURE_LOCATION`, `FOUNDRY_OPENAI_BASE_URL=https://<YOUR_FOUNDRY_ACCOUNT>.openai.azure.com/openai/v1/`, 기존 `FOUNDRY_MODEL_DEPLOYMENT`, `FOUNDRY_API_MODE=chat_completions`, `FOUNDRY_TOKEN_SCOPE=https://ai.azure.com/.default`를 설정합니다. OpenAI 추론 URL은 project endpoint가 아닙니다. 미사용 항목을 포함해 남은 `<...>` placeholder는 자신의 값으로 바꾸거나 비우세요. 비밀키와 액세스 토큰은 저장하지 않습니다. `.env`는 Git 무시 대상이지만 암호화되지 않습니다. 로컬 계정 및 테넌트를 확인하고 프로세스 환경 변수가 `.env`보다 우선함에 유의하세요.
 
 ```powershell
 .\.venv\Scripts\aca-agent-sample.exe preflight config-check
@@ -59,7 +59,7 @@ az group create --subscription $sub --name $rg --location $location --output non
 if ($LASTEXITCODE -ne 0) { throw 'RG creation failed.' }
 ```
 
-실측 전 할당량은 `SessionPools 0/50`, `SandboxCores 0/300`이었으며 사용자 구독의 제한을 의미하지 않습니다. 별도 Data Disk 볼륨은 Memory 비교에 연결하지 않습니다.
+실측 전 공유 구독의 할당량은 `SessionPools 0/50`, `SandboxCores 0/300`이었습니다. Memory 비교에서는 별도 Data Disk 볼륨을 연결하지 않습니다.
 
 ### 방법 A: Bicep 직접 배포
 
@@ -74,7 +74,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Sandbox group deployment failed.' }
 az resource list --subscription $sub -g $rg --query '[].{name:name,type:type,location:location}' -o json
 ```
 
-풀의 `maxConcurrentSessions`는 **5~600**이며 미리 준비된 `readySessionInstances`와 다릅니다. 과도한 동시 세션은 429가 될 수 있습니다. `Microsoft.App/sandboxGroups@2026-07-01` 템플릿에는 실배포에 필요한 `properties: {}`가 들어 있습니다. `BCP081` 로컬 타입 경고와 서비스 수락은 별개입니다. Managed Environment는 이 구성에 필요하지 않습니다.
+풀의 `maxConcurrentSessions`는 5~600이며 미리 준비된 `readySessionInstances`와 다릅니다. 과도한 동시 세션은 429가 될 수 있습니다. `Microsoft.App/sandboxGroups@2026-07-01` 템플릿에는 실배포에 필요한 `properties: {}`가 들어 있습니다. `BCP081` 로컬 타입 경고와 서비스 수락은 별개입니다. Managed Environment는 이 구성에 필요하지 않습니다.
 
 ### 방법 B: setup 스크립트 (A 대신 선택)
 
@@ -95,7 +95,7 @@ try {
 
 ### 데이터 평면 역할과 endpoint
 
-방법 A에서만 역할을 생성합니다. 역할 정의 ID는 공개된 내장 역할 ID이며 사용자 식별자가 아닙니다. `User`가 아닌 서비스 주체는 올바른 object ID와 principal type으로 변경합니다.
+방법 A에서만 역할을 생성합니다. 역할 정의 ID는 공개된 내장 역할 ID입니다. `User`가 아닌 서비스 주체는 올바른 object ID와 principal type으로 변경합니다.
 
 ```powershell
 $pythonScope = "/subscriptions/$sub/resourceGroups/$rg/providers/Microsoft.App/sessionPools/$pythonPool"
@@ -120,7 +120,7 @@ if ($LASTEXITCODE -ne 0 -or -not $shellEndpoint) { throw 'Shell endpoint unavail
 
 ### 기존 Foundry 추론 권한
 
-계정 범위의 `Cognitive Services OpenAI User`는 Session/Sandbox 역할과 별개입니다. 계정 관리자에게 올바른 실행 주체의 기존·상속 추론 권한을 확인받으세요. 기록된 라이브 실행은 기존 권한을 재사용했으며 Foundry를 변경하지 않았습니다. 아래 선택 블록은 기본적으로 역할을 생성하지 않습니다. 권한이 없고 권한 있는 관리자의 승인을 받은 경우에만 활성화하세요. 이 계정 scope를 정리용 전용 `$rg`와 혼동하지 말고 기존 Foundry 그룹은 삭제하지 마세요. 역할 목록만으로 추론 전파가 증명되지 않으며 모델을 사용하는 라이브 예제의 성공으로 실제 접근을 확인합니다.
+계정 범위의 `Cognitive Services OpenAI User`는 Session/Sandbox 역할과 별개입니다. 계정 관리자에게 올바른 실행 주체의 기존·상속 추론 권한을 확인받으세요. 기록된 라이브 실행은 기존 권한을 재사용했으며 Foundry를 변경하지 않았습니다. 아래 선택 블록은 기본적으로 역할을 생성하지 않습니다. 권한이 없고 권한 있는 관리자의 승인을 받은 경우에만 활성화하세요. 이 계정 scope를 정리용 전용 `$rg`와 혼동하지 말고 기존 Foundry 그룹은 삭제하지 마세요. 모델을 사용하는 라이브 예제의 성공으로 실제 추론 접근을 확인합니다.
 
 ```powershell
 $foundryScope = '<YOUR_EXISTING_FOUNDRY_ACCOUNT_ARM_ID>'
@@ -160,7 +160,7 @@ foreach ($key in $values.Keys) {
 ```
 
 
-활성 세션 ID가 아직 없다면 `.env` 연결 **후** 아래와 같이 추측하기 어려운 ID를 생성해 예제를 한 번 명시적으로 실행한 뒤 아래 GET 폴링을 수행할 수 있습니다. 실패 시 오류를 조사하고 결과가 불명인 요청을 자동 반복하지 마세요. 생성 ID와 예제의 콘솔 출력은 비공개로 다루세요.
+활성 세션 ID가 아직 없다면 `.env` 연결 후 아래와 같이 추측하기 어려운 ID를 생성해 예제를 한 번 명시적으로 실행한 뒤 아래 GET 폴링을 수행할 수 있습니다. 실패 시 오류를 조사하고 결과가 불명인 요청을 자동 반복하지 마세요. 생성 ID와 예제의 콘솔 출력은 비공개로 다루세요.
 
 ```powershell
 $existingSessionIdentifier = [guid]::NewGuid().ToString('N')
@@ -170,7 +170,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Live session check failed; inspect the error b
 
 ### 데이터 평면 전파 확인
 
-역할 목록과 토큰 발급만으로 데이터 평면 전파를 증명할 수 없습니다. 기존에 **살아 있는** 테스트 세션 ID가 있을 때만 아래 GET을 사용합니다. ID가 없으면 3단계의 단일 라이브 실행을 한 번 명시적으로 시도해 확인하고, 결과 불명인 POST는 자동 재시도하지 마세요. 새/만료 ID의 404는 RBAC 전파 실패와 다릅니다. Sandbox 권한은 아래 읽기 전용 목록 GET 또는 성공한 실제 create/exec로 확인합니다. 401/404 등은 즉시 중단해 인증·ID를 조사하며 403만 제한된 시간 동안 폴링합니다. 역할 전파 확인에 필요한 관측 권한은 구성에 따라 다를 수 있습니다.
+데이터 평면 전파는 기존에 살아 있는 테스트 세션 ID로 아래 GET을 사용해 확인합니다. ID가 없으면 3단계의 단일 라이브 실행을 한 번 명시적으로 시도해 확인하고, 결과 불명인 POST는 자동 재시도하지 마세요. 새/만료 ID의 404는 RBAC 전파 실패와 다릅니다. Sandbox 권한은 아래 읽기 전용 목록 GET 또는 성공한 실제 create/exec로 확인합니다. 401/404 등은 즉시 중단해 인증·ID를 조사하며 403만 제한된 시간 동안 폴링합니다. 역할 전파 확인에 필요한 관측 권한은 구성에 따라 다를 수 있습니다.
 
 ```powershell
 # 위에서 .env를 연결한 뒤 본인이 보유한 활성 identifier를 사용합니다.
@@ -208,7 +208,7 @@ $py = '.\.venv\Scripts\python.exe'
 & $py .\examples\sandbox\snapshot_clone.py
 ```
 
-실제 실행은 `.env`의 `ENABLE_LIVE_AZURE=true` **및** `--live`가 필요합니다. 원시 결과와 manifest는 비공개입니다. 세션 식별자와 nonce를 공유하지 마세요. 아래 TTL은 300초 cooldown 풀에서 330초를 기다리며 비용이 추가될 수 있습니다. Shell만 별도 endpoint를 일시 사용합니다.
+실제 실행은 `.env`의 `ENABLE_LIVE_AZURE=true` 및 `--live`가 필요합니다. 원시 결과와 manifest는 비공개입니다. 세션 식별자와 nonce를 공유하지 마세요. 아래 TTL은 300초 cooldown 풀에서 330초를 기다리며 비용이 추가될 수 있습니다. Shell만 별도 endpoint를 일시 사용합니다.
 
 ```powershell
 & $py .\examples\dynamic_sessions\session_reuse.py --live
@@ -226,7 +226,7 @@ finally {
 & $py .\examples\sandbox\snapshot_clone.py --live
 ```
 
-동일 예제는 설치된 CLI에서도 실행할 수 있습니다. Shell 명령에는 위와 같은 endpoint override를 적용하세요. 라이브 기록은 예제 파일 직접 실행을 검증했으며 모든 CLI 라이브 dispatch를 검증한 것은 아닙니다.
+동일 예제는 설치된 CLI에서도 실행할 수 있습니다. Shell 명령에는 위와 같은 endpoint override를 적용하세요.
 
 ```powershell
 .\.venv\Scripts\aca-agent-sample.exe dynamic-session reuse --live
@@ -252,14 +252,14 @@ finally {
 
 ## 4단계: 정리와 설정 복원
 
-예제는 자기 소유 sandbox/snapshot을 정리하려고 시도합니다. 실패하면 해당 실행의 비공개 manifest를 선택하여 우선 dry run으로 확인한 후 삭제합니다. setup이 만든 리소스는 자동 manifest 대상이 아닙니다. 삭제 요청 수락과 실제 삭제 완료는 다릅니다.
+예제는 자기 소유 sandbox/snapshot을 정리하려고 시도합니다. 실패하면 해당 실행의 비공개 manifest를 선택하여 우선 dry run으로 확인한 후 삭제합니다. setup이 만든 리소스는 자동 manifest 대상이 아닙니다. 삭제 요청 후 실제 삭제 완료까지 확인합니다.
 
 ```powershell
 .\scripts\cleanup.ps1 -ManifestPath '.internal\runs\<YOUR_RUN_MANIFEST>.json'
 .\scripts\cleanup.ps1 -ManifestPath '.internal\runs\<YOUR_RUN_MANIFEST>.json' -Execute -Confirm:$false
 ```
 
-Session만 배포했다면 아래 Sandbox 목록 반복문은 생략하세요. 배포하지 않은 그룹을 조회하지 않습니다. Sandbox/snapshot 데이터 평면 목록도 삭제 전에 확인하세요. 다음 명령은 **이번 실습을 위해 새로 만들고 소유권을 확인한 그룹 전체를 영구 삭제**합니다. 기존 Foundry 그룹은 절대 사용하지 않습니다. `$rg`와 `$sub`의 실제 대상을 다시 검토한 뒤에만 실행하세요.
+Session만 배포했다면 아래 Sandbox 목록 반복문은 생략하세요. 배포하지 않은 그룹을 조회하지 않습니다. Sandbox/snapshot 데이터 평면 목록도 삭제 전에 확인하세요. 다음 명령은 이번 실습을 위해 새로 만들고 소유권을 확인한 그룹 전체를 영구 삭제합니다. 기존 Foundry 그룹은 절대 사용하지 않습니다. `$rg`와 `$sub`의 실제 대상을 다시 검토한 뒤에만 실행하세요.
 
 ```powershell
 # RG 삭제 전 데이터 평면 목록을 비공개로 확인합니다.
@@ -286,7 +286,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Remaining role lookup failed.' }
 az rest --method get --url "https://management.azure.com/subscriptions/$sub/providers/Microsoft.App/locations/$location/usages?api-version=2025-01-01" --query 'value[?contains(name.value, `Session`) || contains(name.value, `Sandbox`)].{name:name.value,current:currentValue,limit:limit}' -o json
 ```
 
-역할은 삭제된 scope에 직접 조회하지 않고 구독 목록에서 필터합니다. 세션/샌드박스 할당량은 **공유 구독의 전체 사용량**이므로 다른 작업이 있다면 0이 아닐 수 있습니다. 당시에는 리소스·역할 0건, `SessionPools 0/50`, `SandboxCores 0/300`으로 복귀했습니다. 이 값이 모든 환경의 목표나 한도를 뜻하지 않습니다.
+역할은 구독 목록에서 필터해 조회합니다. 세션/샌드박스 할당량은 공유 구독의 전체 사용량이므로 다른 작업이 있다면 0이 아닐 수 있습니다. 당시에는 리소스·역할 0건, `SessionPools 0/50`, `SandboxCores 0/300`으로 복귀했습니다.
 
 기존 Foundry 설정은 유지하고 임시 필드만 비웁니다. 사전에 다른 리소스 설정을 사용했다면 아래 대신 자신의 비공개 원본을 복원한 뒤 두 opt-in을 false로 설정하세요. 기존 프로세스 override도 해제합니다.
 
@@ -302,4 +302,4 @@ foreach ($key in @('DYNAMIC_SESSIONS_RESOURCE_GROUP','DYNAMIC_SESSIONS_POOL_ENDP
 Remove-Item Env:ENABLE_LIVE_AZURE, Env:ENABLE_PROVISIONING, Env:DYNAMIC_SESSIONS_POOL_ENDPOINT -ErrorAction SilentlyContinue
 ```
 
-**잔여 리소스 0건은 청구 0원이 아닙니다.** Cost Management 집계는 지연될 수 있고 이전 실행·스냅샷 및 별도 Foundry 리소스 그룹의 추론 비용은 나중에 반영될 수 있습니다. 나중에 양 비용 범위를 확인하세요. [문제 해결](troubleshooting.md) · [보안](../SECURITY.md) · [Sandbox 비용](https://sandboxes.azure.com/docs/sandboxes/cost). 로케일이 없는 Sandbox 사이트와 일부 한국어 Learn 페이지는 영어로 표시될 수 있습니다.
+Cost Management 집계는 지연될 수 있고 이전 실행·스냅샷 및 별도 Foundry 리소스 그룹의 추론 비용은 나중에 반영될 수 있습니다. 두 비용 범위를 확인하세요. [문제 해결](troubleshooting.md) · [보안](../SECURITY.md) · [Sandbox 비용](https://sandboxes.azure.com/docs/sandboxes/cost). 로케일이 없는 Sandbox 사이트와 일부 한국어 Learn 페이지는 영어로 표시될 수 있습니다.
