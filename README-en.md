@@ -21,7 +21,7 @@ A and B are independent alternatives. Only model-backed examples require Foundry
 
 ## Validation scope
 
-On 2026-11-05, six examples, TTL expiry and three samples per mode were verified in Azure, alongside offline examples and Foundry integration with a simulated backend. Sandbox Bicep deployed successfully despite the local BCP081 schema warning. [Deployment, execution and cleanup How-To](docs/how-to-deploy-and-run-en.md)
+The table below summarizes the results observed when running the six scenarios in Azure (as of 2026-11-05). See the [deployment, execution and cleanup How-To](docs/how-to-deploy-and-run-en.md) for step-by-step instructions.
 
 | Actual live scenario | Observed result |
 | --- | --- |

@@ -22,7 +22,7 @@ See also the [deployment, execution and cleanup How-To](how-to-deploy-and-run-en
 
 | Symptom | Check and resolution |
 | --- | --- |
-| Sandbox deployment `ValidationForResourceFailed` | The `Microsoft.App/sandboxGroups@2026-07-01` Bicep resource required `properties: {}`. Check template properties even if internal details are empty. Check the deployment result separately from a local `BCP081` warning. |
+| Sandbox deployment `ValidationForResourceFailed` | The `Microsoft.App/sandboxGroups@2026-07-01` Bicep resource requires `properties: {}`. Even if detailed error fields are empty, verify that `properties: {}` is present in the template. |
 | `SessionPoolInvalidMaxConcurrentSessions` or 429 | The observed supported range is 5–600. A value of 3 failed on PUT, and overlapping independent sessions at a 5-session ceiling caused 429. Check session count, pool settings and quota; increase the limit if needed.  |
 | Nested file GET 401 | Instead of encoding `agent-demo/source.py` as one route, put basename `source.py` in the route and `path=agent-demo` in the query. Do not automatically widen token permissions or RBAC. |
 | Shell `SessionExecutionPropertyNotSupported` | The actual request body accepts only `{shellCommand, timeoutInSeconds}`. Do not send Python's `codeInputType`/`executionType`. Response `status="0"` is a string exit code and only 0 succeeds. |

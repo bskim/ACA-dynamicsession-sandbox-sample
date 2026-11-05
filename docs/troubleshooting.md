@@ -22,7 +22,7 @@
 
 | 증상 | 확인과 해결 |
 | --- | --- |
-| Sandbox 배포 `ValidationForResourceFailed` | `Microsoft.App/sandboxGroups@2026-07-01` Bicep에 `properties: {}`가 필요했습니다. 빈 내부 details만 나와도 템플릿 속성을 확인하세요. 로컬 `BCP081` 경고와 별도로 배포 결과를 확인하세요. |
+| Sandbox 배포 `ValidationForResourceFailed` | `Microsoft.App/sandboxGroups@2026-07-01` Bicep 리소스에는 `properties: {}`가 필요합니다. 상세 오류 메시지가 비어 있더라도 템플릿에 `properties: {}`가 포함되어 있는지 확인하세요. |
 | `SessionPoolInvalidMaxConcurrentSessions` 또는 429 | 실제 허용 범위는 5~600입니다. 3은 PUT에서 거부됐고 5개 ceiling에 독립 세션이 겹치면 429가 발생했습니다. 세션 수·풀 설정·quota를 점검하고 필요하면 한도를 늘립니다.  |
 | 중첩 파일 GET 401 | `agent-demo/source.py`를 통째로 route에 인코딩하지 않고 basename `source.py`를 route에, `path=agent-demo`를 query에 분리해 해결했습니다. 무조건 토큰이나 RBAC를 확대하지 마세요. |
 | Shell `SessionExecutionPropertyNotSupported` | 실제 요청 본문은 `{shellCommand, timeoutInSeconds}`만 허용했습니다. Python용 `codeInputType`/`executionType`을 보내지 마세요. 응답 `status="0"`은 문자열 종료 코드이며 0만 성공입니다. |

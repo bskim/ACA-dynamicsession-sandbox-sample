@@ -6,6 +6,7 @@ param sandboxGroupName string
 param location string = resourceGroup().location
 param tags object = {}
 
+#disable-next-line BCP081
 resource sandboxGroup 'Microsoft.App/sandboxGroups@2026-07-01' = {
   name: sandboxGroupName
   location: location

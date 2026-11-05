@@ -2,9 +2,7 @@
 
 # 배포·실행·정리 How-To (Windows PowerShell)
 
-이 가이드는 전용 테스트 리소스 그룹에서 PythonLTS, 선택 Shell, Sandbox를 배포하고 정리합니다. 실제 배포·실행·대기·Foundry 추론은 비용이 발생할 수 있습니다. 기존 Foundry나 다른 사용자의 리소스를 수정·삭제하지 마세요. `<YOUR_...>`는 사용자가 직접 교체하며 실제 값·토큰·결과는 비공개로 유지합니다. 각 경로는 독립적입니다. 불필요한 풀이나 그룹은 생략하고 해당 변수·역할도 생략하세요.
-
-2026-11-05에 실제 Azure에서 예제 6종, TTL 및 각 모드 3표본을 검증했습니다. Bicep 원본을 참조하는 subscription 배포와 예제 파일 직접 라이브 실행을 사용했습니다. API는 preview이며 지역·권한·버전에 따라 다릅니다.
+이 가이드는 전용 테스트 리소스 그룹에서 PythonLTS, 선택 Shell, Sandbox를 배포하고 실행한 뒤 정리하는 절차를 안내합니다. 실제 배포·실행·대기·Foundry 추론은 비용이 발생할 수 있습니다. 기존 Foundry나 다른 사용자의 리소스를 수정·삭제하지 마세요. `<YOUR_...>`는 사용자가 직접 교체하며 실제 값·토큰·결과는 비공개로 유지합니다. 각 경로는 독립적이므로 불필요한 풀이나 그룹은 생략하세요. (검증 기준일: 2026-11-05)
 
 ## 1단계: 사전 준비
 
@@ -59,7 +57,7 @@ az group create --subscription $sub --name $rg --location $location --output non
 if ($LASTEXITCODE -ne 0) { throw 'RG creation failed.' }
 ```
 
-실측 전 공유 구독의 할당량은 `SessionPools 0/50`, `SandboxCores 0/300`이었습니다. Memory 비교에서는 별도 Data Disk 볼륨을 연결하지 않습니다.
+출력에서 현재 구독의 `SessionPools`와 `SandboxCores` 여유 한도를 확인합니다. Memory 비교에서는 별도 Data Disk 볼륨을 연결하지 않습니다.
 
 ### 방법 A: Bicep 직접 배포
 
@@ -74,7 +72,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Sandbox group deployment failed.' }
 az resource list --subscription $sub -g $rg --query '[].{name:name,type:type,location:location}' -o json
 ```
 
-풀의 `maxConcurrentSessions`는 5~600이며 미리 준비된 `readySessionInstances`와 다릅니다. 과도한 동시 세션은 429가 될 수 있습니다. `Microsoft.App/sandboxGroups@2026-07-01` 템플릿에는 실배포에 필요한 `properties: {}`가 들어 있습니다. `BCP081` 로컬 타입 경고와 서비스 수락은 별개입니다. Managed Environment는 이 구성에 필요하지 않습니다.
+풀의 `maxConcurrentSessions`는 5~600이며 미리 준비된 `readySessionInstances`와 다릅니다. 과도한 동시 세션은 429가 될 수 있습니다. `Microsoft.App/sandboxGroups@2026-07-01` 템플릿에는 실배포에 필요한 `properties: {}`가 포함되어 있으며, 별도의 Managed Environment는 필요하지 않습니다.
 
 ### 방법 B: setup 스크립트 (A 대신 선택)
 

@@ -2,9 +2,7 @@
 
 # Deployment, execution and cleanup How-To (Windows PowerShell)
 
-This guide deploys PythonLTS, optional Shell, and Sandbox in a dedicated test resource group and removes them afterwards. Deployment, execution, waiting and Foundry inference may incur charges. Never modify or delete existing Foundry or other users' resources. Replace `<YOUR_...>` yourself; keep actual values, tokens and results private. The paths are independent: skip unneeded pools/groups and their variables and roles.
-
-Six examples, TTL and three samples per mode were verified in Azure on 2026-11-05, using subscription deployment referencing the Bicep sources and direct live execution of example files. APIs are preview and behavior depends on region, permissions and versions.
+This guide walks through deploying PythonLTS, optional Shell, and Sandbox in a dedicated test resource group, running the scenarios, and cleaning up afterwards. Deployment, execution, waiting and Foundry inference may incur charges. Never modify or delete existing Foundry or other users' resources. Replace `<YOUR_...>` yourself; keep actual values, tokens and results private. The paths are independent, so skip unneeded pools or groups. (Validated as of 2026-11-05)
 
 ## Step 1: Prepare
 
@@ -59,7 +57,7 @@ az group create --subscription $sub --name $rg --location $location --output non
 if ($LASTEXITCODE -ne 0) { throw 'RG creation failed.' }
 ```
 
-Before the recorded run, shared subscription usage was `SessionPools 0/50` and `SandboxCores 0/300`. Leave Data Disk volumes unattached for the Memory comparison.
+Check available `SessionPools` and `SandboxCores` quota in the output. Leave Data Disk volumes unattached for the Memory comparison.
 
 ### Option A: Direct Bicep deployment
 
@@ -74,7 +72,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Sandbox group deployment failed.' }
 az resource list --subscription $sub -g $rg --query '[].{name:name,type:type,location:location}' -o json
 ```
 
-Pool `maxConcurrentSessions` must be 5–600 and differs from preallocated `readySessionInstances`. Too many concurrent sessions may cause 429. The `Microsoft.App/sandboxGroups@2026-07-01` template contains `properties: {}`, required in the live deployment. A local `BCP081` type warning is separate from service acceptance. This configuration does not require a Managed Environment.
+Pool `maxConcurrentSessions` must be 5–600 and differs from preallocated `readySessionInstances`. Too many concurrent sessions may cause 429. The `Microsoft.App/sandboxGroups@2026-07-01` template includes `properties: {}` required for deployment, and does not require a separate Managed Environment.
 
 ### Option B: Setup scripts (instead of A)
 
