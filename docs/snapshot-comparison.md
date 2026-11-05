@@ -26,8 +26,8 @@ Azure 성능 수치가 아니다. JSON/CSV의 `simulated` 필드로 구분한다
 
 ## 증거와 합격 조건
 
-- **v2 설치 도구 증거**: `/usr/local/bin/agent-tool --versions`를 재개 전후 실제 실행한다. git/jq/sqlite3 바이너리·버전, 커스텀 CLI 및 전용 설정 지문이 동일해야 `installed_tool_preserved=true`다. 양 모드 모두 재설치하지 않는다. 디스크 sentinel만 남거나 도구가 실행되지 않으면 실패다.
-- **v2 도구 서버**: 샘플 Git/JSON/SQLite 프로젝트의 파일 인덱스를 최초 시작 때 RAM에 구성한다. probe는 루프백 서버 API를 호출하며 인덱스 및 nonce·카운터는 디스크에서 복원하지 않는다.
+- **설치 도구 증거**: `/usr/local/bin/agent-tool --versions`를 재개 전후 실제 실행한다. git/jq/sqlite3 바이너리·버전, 커스텀 CLI 및 전용 설정 지문이 동일해야 `installed_tool_preserved=true`다. 양 모드 모두 재설치하지 않는다. 디스크 sentinel만 남거나 도구가 실행되지 않으면 실패다.
+- **도구 서버**: 샘플 Git/JSON/SQLite 프로젝트의 파일 인덱스를 최초 시작 때 RAM에 구성한다. probe는 루프백 서버 API를 호출하며 인덱스 및 nonce·카운터는 디스크에서 복원하지 않는다.
 - 디스크 증거는 `sentinel.txt`의 고정 내용과 SHA-256이다. 최초 쓰기는
   `flush()`와 `os.fsync()`를 완료한다. 재시작은 기존 파일을 덮어쓰지 않는다.
 - RAM nonce, 64 KiB 난수 버퍼/체크섬, 프로세스 시작 지문과 카운터는 데몬의
@@ -83,47 +83,7 @@ sub-second SLO로 해석하지 않는다. 실험 결과와 적용 범위는 아�
 원시 관찰값은 공개 문서가 아닌 `.internal\results\`에 보관한다.
 
 
-## 이전 v1 실제 Azure 독립 표본 (2026-11-05)
-
-아래 수치는 설치 도구 검증을 추가하기 전의 워커 실험이다. v2 측정값과 혼합하지 않는다.
-
-[배포·실행·정리 How-To](how-to-deploy-and-run.md)를 준비한 후 `compare_snapshot_modes.py --live --iterations 3`으로 실행했습니다. `simulated=false`, 모드별 각 3개 신규 sandbox, 총 6개이며 전부 oracle 통과 및 cleanup 성공입니다. 모드 순서는 회차마다 교차했습니다. 프로비저닝과 fixture 설치는 4개 단계에서 제외했고 Data Disk는 연결하지 않았습니다.
-
-| 모드 | 회차 | stop_to_stopped_ms | resume_to_running_ms | first_exec_probe_ms | worker_ready_ms | 디스크 SHA | RAM / 재시작 |
-| --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
-| Memory | 1 | 7803.891 | 1212.690 | 235.225 | 294.778 | True | nonce 동일, counter 5→6, 재시작 없음 |
-| Disk | 1 | 6629.338 | 1263.399 | 223.615 | 999.466 | True | worker 없음, 새 nonce, counter 1 |
-| Disk | 2 | 6518.513 | 1361.731 | 207.791 | 673.276 | True | worker 없음, 새 nonce, counter 1 |
-| Memory | 2 | 9626.962 | 857.958 | 209.762 | 273.803 | True | nonce 동일, counter 5→6, 재시작 없음 |
-| Memory | 3 | 7366.401 | 1572.143 | 215.680 | 280.312 | True | nonce 동일, counter 5→6, 재시작 없음 |
-| Disk | 3 | 6516.680 | 1246.546 | 213.401 | 685.342 | True | worker 없음, 새 nonce, counter 1 |
-
-단계별 성공 표본 집계 (ms; p95는 nearest-rank):
-
-| 모드 | 표본 | 성공 | 실패 | 단계 | 평균 ms | p50 ms | p95 ms | 제외 |
-| --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: |
-| Memory | 3 | 3 | 0 | stop_to_stopped_ms | 8265.751 | 7803.891 | 9626.962 | 0 |
-| Memory | 3 | 3 | 0 | resume_to_running_ms | 1214.264 | 1212.690 | 1572.143 | 0 |
-| Memory | 3 | 3 | 0 | first_exec_probe_ms | 220.222 | 215.680 | 235.225 | 0 |
-| Memory | 3 | 3 | 0 | worker_ready_ms | 282.964 | 280.312 | 294.778 | 0 |
-| Disk | 3 | 3 | 0 | stop_to_stopped_ms | 6554.844 | 6518.513 | 6629.338 | 0 |
-| Disk | 3 | 3 | 0 | resume_to_running_ms | 1290.558 | 1263.399 | 1361.731 | 0 |
-| Disk | 3 | 3 | 0 | first_exec_probe_ms | 214.936 | 213.401 | 223.615 | 0 |
-| Disk | 3 | 3 | 0 | worker_ready_ms | 786.028 | 685.342 | 999.466 | 0 |
-
-표본이 모드별 단 3개이므로 p95는 사실상 해당 세 값의 최댓값입니다. 결과는 이 리전/네트워크/이미지/SDK/부하와 작은 워커의 클라이언트 관측값이며 SDK polling 간격을 포함합니다. SLA나 일반적인 모드 간 우열·비용으로 확대하지 마세요. 양 모드에 실패·제외 표본은 없었습니다.
-
-## 오라클과 지연의 아키텍처 해석
-
-- **디스크**: `/workspace/demo/sentinel.txt` SHA-256 `9259d694616fd8a2a2cb5cbdd63b47c9577d61eff2f1f5bdb958426031d96574`가 모든 전후 표본에서 동일했습니다. 이 파일의 바이트 보존을 뜻하며 모든 디스크·외부 시스템의 트랜잭션 보장은 아닙니다.
-- **Memory**: 재개 후 bootstrap 없이 기존 루프백 소켓이 응답했습니다. `worker_boot_nonce`, RAM 버퍼 체크섬과 프로세스 시작 지문이 동일했고 counter는 5→6으로 증가했습니다. RAM·실행 문맥 연속성의 다중 증거이며 `worker_ready_ms` 평균은 282.964ms입니다.
-- **Disk**: 재개 직후 bootstrap 전 probe는 sentinel이 있지만 `worker_alive=false`였고 nonce·counter·checksum·fingerprint는 null이었습니다. 워커 재시작 후 새 nonce/지문 및 counter=1이 관찰됐고 `worker_ready_ms` 평균은 786.028ms입니다. 우연히 PID가 재사용되어도 RAM 연속성 증거가 아닙니다.
-- `stop_to_stopped_ms`: stop 요청 시작부터 SDK polling과 최종 GET으로 Stopped/Suspended 확인까지; 네트워크·poll 비용이 포함됩니다. 이 표본의 Memory 값이 길어도 일반 우열이 아닙니다.
-- `resume_to_running_ms`: resume 요청 시작부터 SDK 및 추가 GET의 Running 확인까지. Running 자체가 워크로드 준비를 의미하지는 않습니다.
-- `first_exec_probe_ms`: Running 확인 직후 첫 `echo ACA_EXEC_READY` 성공까지; 실행 API·네트워크 경로의 준비를 관측합니다.
-- `worker_ready_ms`: 첫 exec probe **이후** worker probe 완료까지의 추가 구간입니다. Memory는 기존 워커 응답을, Disk는 워커 부재 관찰 후 명시적 재시작까지 포함합니다. 전체 resume 시간이 아닙니다.
-
-## v2 실제 툴체인·인덱스 서버 결과 (2026-11-05)
+## 실제 툴체인·인덱스 서버 결과 (2026-11-05)
 
 실제 Azure 6개 표본 모두 통과했다(`simulated=false`). 양 모드에서 git/jq/sqlite3·커스텀 CLI·설정이 재개 후 실행 가능하고 지문도 동일했다. 초기 인덱스는 프로젝트 파일 3개다. Memory는 nonce·버퍼 체크섬·프로세스 시작 지문과 counter 5→6을 유지했다. Disk는 bootstrap 전 서버가 없고 새 지문과 counter 1로 재기동했다. 재개 후 도구 재설치는 없으며 설치는 수명 주기 측정에서 제외했다.
 
@@ -137,3 +97,24 @@ sub-second SLO로 해석하지 않는다. 실험 결과와 적용 범위는 아�
 | Disk | 3 | true | true | false | true | 6790.159 | 1437.641 | 205.635 | 987.945 |
 
 모드별 표본은 3개뿐이다. SDK polling을 포함한 클라이언트 관측값이며 SLA나 일반적인 성능 우열로 확대하지 않는다.
+
+
+단계별 성공 표본 집계 (ms; p95는 nearest-rank):
+
+| 모드 | 표본 | 성공 | 실패 | 단계 | 평균 ms | p50 ms | p95 ms | 제외 |
+| --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: |
+| Memory | 3 | 3 | 0 | stop_to_stopped_ms | 9170.077 | 9106.398 | 9503.373 | 0 |
+| Memory | 3 | 3 | 0 | resume_to_running_ms | 1240.492 | 1284.911 | 1348.855 | 0 |
+| Memory | 3 | 3 | 0 | first_exec_probe_ms | 257.938 | 252.034 | 297.033 | 0 |
+| Memory | 3 | 3 | 0 | worker_ready_ms | 421.253 | 412.084 | 451.825 | 0 |
+| Disk | 3 | 3 | 0 | stop_to_stopped_ms | 6838.375 | 6802.469 | 6922.497 | 0 |
+| Disk | 3 | 3 | 0 | resume_to_running_ms | 1405.231 | 1437.641 | 1452.435 | 0 |
+| Disk | 3 | 3 | 0 | first_exec_probe_ms | 211.239 | 213.394 | 214.688 | 0 |
+| Disk | 3 | 3 | 0 | worker_ready_ms | 938.684 | 936.704 | 987.945 | 0 |
+
+## 아키텍처 해석
+
+- **설치 도구와 디스크**: `installed_tool_preserved=true`와 `disk_preserved=true`는 두 모드 모두 유지되는 루트 파일시스템에 `git`, `jq`, `sqlite3`, `agent-tool`과 설정이 설치되기 때문이다. 재개 후 재설치 없이 실행하며 sentinel만으로는 도구 보존을 증명하지 않는다.
+- **Memory**: `memory_preserved=true`, `worker_restarted=false`. 기존 루프백 서버와 RAM 인덱스, nonce, 버퍼 체크섬, 프로세스 지문 및 카운터 증가가 연속성을 증명한다. `worker_ready_ms` 평균은 421.253ms다.
+- **Disk**: `memory_preserved=false`, `worker_restarted=true`. VM·프로세스 RAM과 캐시 인덱스는 소실되며 명시적 재기동으로 보존된 프로젝트 파일에서 인덱스를 다시 만든다. `worker_ready_ms` 평균은 938.684ms다. PID 재사용은 연속성 증거가 아니다.
+- `worker_ready_ms`는 첫 exec 이후의 추가 구간이지 전체 재개 시간이 아니며 Disk에서는 서버 부재 확인·재기동을 포함한다. 모드별 세 표본의 p95는 최댓값이다. polling·네트워크·호스트 비용이 포함되므로 SLA, 일반적 성능 우열 또는 비용 우위를 추론하지 않는다. 프로비저닝은 제외했고 Data Disk를 연결하지 않았으며 새 샌드박스 6개가 모두 통과하고 정리됐다.

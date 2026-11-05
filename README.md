@@ -29,8 +29,8 @@ A와 B는 독립적인 대안입니다. 모델을 사용하는 예제만 Foundry
 | 코딩 에이전트 | 생성·예상 테스트 실패·수정 테스트 통과, 모델 턴 `[2,2,2]`, wall 약 61.9초 |
 | Shell | 2회 실행, 매번 cwd 명시, wall 약 5.0초 |
 | Sandbox 명령 에이전트 | 실제 git/jq/sqlite3·전용 CLI 설치, 인덱스 도구 서버 호출, stop/resume 뒤 재설치 없는 패치·검증 ([상세](docs/sandbox.md)) |
-| Memory/Disk 비교 | 각 3표본 통과; 파일은 양쪽 보존, RAM은 Memory만 연속; worker 준비 평균 282.964/786.028ms ([전체 표](docs/snapshot-comparison.md)) |
-| 명시적 snapshot clone | 캡처 시점 해시 일치, 원본 수정 후 clone 파일 독립 ([상세](docs/sandbox.md)) |
+| Memory/Disk 비교 | 각 3표본 통과; 설치된 CLI 도구·파일은 양쪽 보존, RAM 도구 서버는 Memory만 연속; worker 준비 평균 421.253/938.684ms ([전체 표](docs/snapshot-comparison.md)) |
+| 명시적 snapshot clone | 캡처 시점 해시 일치, clone 도구 재설치 0회(`clone_provision_count=0`) 및 원본 수정 후 상태 독립 ([상세](docs/sandbox.md)) |
 
 TTL 후 같은 ID는 이전 상태 복원이 아니라 새 빈 세션을 가리킵니다. Memory/Disk 지연은 클라이언트·polling 포함의 작은 표본이므로 SLA가 아니며 Disk worker 준비에는 재기동이 포함됩니다. 리소스 잔여 0건은 청구 0원을 뜻하지 않습니다.
 
@@ -89,6 +89,7 @@ $env:ENABLE_PROVISIONING = 'true'
 | 속성 | Memory | Disk |
 | --- | --- | --- |
 | 루트 디스크 | 보존 | 보존 |
+| 설치된 외부 CLI 도구 (git/jq/sqlite3/agent-tool) | 보존 — 재설치 불필요 | 보존 — 재설치 불필요 |
 | RAM·프로세스 | 재개 후 유지 | 소실; VM 및 워커 재기동 |
 | 워크로드 준비 | 기존 워커 확인 | 재개 후 명시적 bootstrap 포함 |
 | Data Disk 볼륨 | **연결 시 미지원** | 지원되는 모드 |

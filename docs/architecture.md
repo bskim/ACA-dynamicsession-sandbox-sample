@@ -10,7 +10,7 @@
 
 ## 대안 A / B
 
-A는 `Microsoft.App/sessionPools`의 PythonLTS 세션으로 요청 `identifier`를 라우팅합니다. 동일 활성 ID의 인터프리터와 파일은 재사용되지만 유휴 만료 후 보장되지 않습니다. Shell은 별도 선택 풀입니다. B는 `Microsoft.App/sandboxGroups`의 격리된 마이크로 VM을 만들고 SDK로 exec·stop·resume·삭제를 제어합니다. Memory는 RAM과 루트 디스크를, Disk는 루트 디스크만 보존합니다. named snapshot에서 새 clone을 만드는 것은 기존 인스턴스 재개와 다릅니다. [A 가이드](dynamic-sessions.md) · [B 가이드](sandbox.md) · [상태 오라클](snapshot-comparison.md)
+A는 `Microsoft.App/sessionPools`의 PythonLTS 세션으로 요청 `identifier`를 라우팅합니다. 동일 활성 ID의 인터프리터와 파일은 재사용되지만 유휴 만료 후 보장되지 않습니다. Shell은 별도 선택 풀입니다. B는 `Microsoft.App/sandboxGroups`의 격리된 마이크로 VM을 만들고 SDK로 exec·stop·resume·삭제를 제어합니다. 샌드박스 내부에 에이전트 CLI 툴체인(`git`, `jq`, `sqlite3`, `agent-tool`·`repo-audit` 등 커스텀 CLI)과 루프백 리포지토리 인덱스 도구 서버(`state_worker.py`)를 설치·제어합니다. Memory는 RAM과 루트 디스크를 보존하고, Disk는 설치 도구와 루트 디스크를 보존하지만 서버 프로세스는 재시작합니다. named snapshot에서 새 clone을 만드는 것은 기존 인스턴스 재개와 다릅니다. [A 가이드](dynamic-sessions.md) · [B 가이드](sandbox.md) · [상태 오라클](snapshot-comparison.md)
 
 ## 운영 경계
 

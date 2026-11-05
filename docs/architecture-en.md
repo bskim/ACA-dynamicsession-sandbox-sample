@@ -10,7 +10,7 @@ The user and local CLI orchestrator and tool policy form the trusted area. The F
 
 ## Alternatives A / B
 
-A routes an `identifier` to a PythonLTS session in `Microsoft.App/sessionPools`. The interpreter and files are reused for the same active ID, but are not guaranteed after idle expiry. Shell is a separate optional pool. B creates an isolated micro VM in `Microsoft.App/sandboxGroups`, and uses the SDK for exec, stop, resume, and deletion. Memory preserves RAM and root disk; Disk preserves only the root disk. Creating a new clone from a named snapshot differs from resuming the existing instance. [A guide](dynamic-sessions-en.md) · [B guide](sandbox-en.md) · [State oracle](snapshot-comparison-en.md)
+A routes an `identifier` to a PythonLTS session in `Microsoft.App/sessionPools`. The interpreter and files are reused for the same active ID, but are not guaranteed after idle expiry. Shell is a separate optional pool. B creates an isolated micro VM in `Microsoft.App/sandboxGroups`, and uses the SDK for exec, stop, resume, and deletion. Inside the sandbox it installs and controls the agent CLI toolchain (`git`, `jq`, `sqlite3`, and custom CLIs including `agent-tool` and `repo-audit`) and the loopback repository-index tool server (`state_worker.py`). Memory preserves RAM and root disk; Disk preserves the installed tools and root disk but restarts the server process. Creating a new clone from a named snapshot differs from resuming the existing instance. [A guide](dynamic-sessions-en.md) · [B guide](sandbox-en.md) · [State oracle](snapshot-comparison-en.md)
 
 ## Operational boundary
 

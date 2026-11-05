@@ -11,7 +11,7 @@
 Python 3.13 이상, Git, Azure CLI, Bicep, 기존 tool-calling Foundry 배포 및 프로비저닝·역할 할당 권한이 필요합니다. 런타임 사용자는 Foundry 추론 권한도 필요합니다. Python 버전은 자신의 설치에 맞게 선택하세요.
 
 ```powershell
-git clone '<YOUR_PUBLIC_REPOSITORY_URL>'
+git clone https://github.com/bskim/ACA-dynamicsession-sandbox-sample.git
 Set-Location ACA-dynamicsession-sandbox-sample
 py -3.13 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e '.[test]'
@@ -247,7 +247,7 @@ finally {
 | --- | --- |
 | `reuse=passed`, counter 42, 격리 `passed`; TTL 실험 `state_lost` | [Dynamic Sessions](dynamic-sessions.md) |
 | coding 생성·예상 실패·수정 테스트 통과; Shell 2회 cwd 명시 | [Dynamic Sessions](dynamic-sessions.md) |
-| v2 CLI 설치·도구 서버·stop/resume 재사용; clone 재설치 0회·독립성 | [Sandbox](sandbox.md) |
+| CLI 설치·도구 서버·stop/resume 재사용; clone 재설치 0회·독립성 | [Sandbox](sandbox.md) |
 | 양 모드 파일 보존, Memory RAM 연속성, Disk 워커 재시작 및 단계별 지연 | [비교 실험](snapshot-comparison.md) |
 
 ## 4단계: 정리와 설정 복원

@@ -11,7 +11,7 @@ Six examples, TTL and three samples per mode were verified in real Azure on 2026
 You need Python 3.13 or newer, Git, Azure CLI, Bicep, an existing tool-calling Foundry deployment, and provisioning and role-assignment permissions. The runtime user also needs Foundry inference permissions. Select an installed Python version.
 
 ```powershell
-git clone '<YOUR_PUBLIC_REPOSITORY_URL>'
+git clone https://github.com/bskim/ACA-dynamicsession-sandbox-sample.git
 Set-Location ACA-dynamicsession-sandbox-sample
 py -3.13 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e '.[test]'
@@ -173,7 +173,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Live session check failed; inspect the error b
 A role listing or successful token issuance does not prove data-plane propagation. Use the following GET only for an **existing live** test session identifier. If there is none, explicitly try a single live run in step 3 and check success; do not automatically repeat an indeterminate POST. A new or expired identifier can produce 404 independently of RBAC. Check Sandbox access with the read-only list GET below or successful actual create/exec. Stop and investigate authentication/ID for 401/404 and other errors; poll only 403 within a deadline. The permissions needed to observe propagation may differ by configuration.
 
 ```powershell
-# Use an existing, still-active identifier you own (after mapping .env below).
+# Use an existing, still-active identifier you own (after mapping .env above).
 if (-not $existingSessionIdentifier -or $existingSessionIdentifier -match '[<>]') { throw 'Set an existing active session ID first.' }
 $deadline = (Get-Date).AddMinutes(3)
 do {
@@ -247,7 +247,7 @@ finally {
 | --- | --- |
 | `reuse=passed`, counter 42, isolation `passed`; TTL experiment `state_lost` | [Dynamic Sessions](dynamic-sessions-en.md) |
 | Coding creation, expected failure and repaired test pass; Shell explicit cwd twice | [Dynamic Sessions](dynamic-sessions-en.md) |
-| v2 CLI installation, tool server and reuse after stop/resume; clone without reinstallation and state isolation | [Sandbox](sandbox-en.md) |
+| CLI installation, tool server and reuse after stop/resume; clone without reinstallation and state isolation | [Sandbox](sandbox-en.md) |
 | Both modes preserve files, Memory retains RAM, Disk restarts worker; stage latency | [Comparison experiment](snapshot-comparison-en.md) |
 
 ## Step 4: Cleanup and configuration restoration

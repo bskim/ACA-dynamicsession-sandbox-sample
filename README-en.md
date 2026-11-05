@@ -29,8 +29,8 @@ In addition to offline examples and Foundry + simulated-backend integration, six
 | Coding agent | creation, expected failing test and repaired test passed, model turns `[2,2,2]`, wall about 61.9 s |
 | Shell | 2 runs with explicit cwd each time, wall about 5.0 s |
 | Sandbox command agent | Real git/jq/sqlite3 and custom CLI installation, index-server calls, patch/verification after stop/resume without reinstallation ([details](docs/sandbox-en.md)) |
-| Memory/Disk comparison | 3 samples each passed; files retained in both, RAM continuity only in Memory; mean worker-ready 282.964/786.028 ms ([full tables](docs/snapshot-comparison-en.md)) |
-| Explicit snapshot clone | snapshot-time hash matched; clone file independent after source modification ([details](docs/sandbox-en.md)) |
+| Memory/Disk comparison | 3 samples each passed; installed CLI tools and files retained in both, RAM tool-server continuity only in Memory; mean worker-ready 421.253/938.684 ms ([full tables](docs/snapshot-comparison-en.md)) |
+| Explicit snapshot clone | snapshot-time hash matched; zero clone tool reinstallations (`clone_provision_count=0`) and state independent after source modification ([details](docs/sandbox-en.md)) |
 
 After TTL the same ID points to a new empty session, not restored old state. Memory/Disk timings are small-sample client observations including polling, not an SLA; Disk worker-ready includes restart. Zero remaining resources does not mean zero charges.
 
@@ -89,6 +89,7 @@ $env:ENABLE_PROVISIONING = 'true'
 | Property | Memory | Disk |
 | --- | --- | --- |
 | Root disk | Preserved | Preserved |
+| Installed external CLI tools (git/jq/sqlite3/agent-tool) | Preserved — no reinstallation | Preserved — no reinstallation |
 | RAM and processes | Preserved after resume | Lost; VM and worker restart |
 | Workload readiness | Verify the existing worker | Explicit post-resume bootstrap included |
 | Data Disk volume | **Unsupported when attached** | Supported mode |
