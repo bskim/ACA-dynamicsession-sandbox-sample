@@ -28,10 +28,21 @@ def main() -> int:
     else: client = FakeDynamicSessionsClient()
     session_id = SessionRegistry().get_or_create("demo", "shell", args.session_id)
     try:
-        results = [client.execute_shell(session_id, "cd /mnt/data && pwd") for _ in range(2)]
+        commands = [
+            "cd /mnt/data && mkdir -p shell-demo && echo 'hello-from-shell-session' > shell-demo/note.txt && pwd",
+            "cd /mnt/data && cat shell-demo/note.txt && pwd",
+        ]
+        results = []
+        for idx, cmd in enumerate(commands, 1):
+            if args.live:
+                print(f"[shell-agent] Run {idx}/2 (Session {mask_session_id(session_id)}): $ {cmd}", file=sys.stderr, flush=True)
+            res = client.execute_shell(session_id, cmd)
+            if args.live:
+                print(f"[shell-agent] Run {idx}/2 stdout:\n{res.stdout.strip()}", file=sys.stderr, flush=True)
+            results.append(res)
         for result in results:
             if result.status != "succeeded": raise RuntimeError("Shell execution failed: " + result.stderr)
-            if result.stdout.strip() != "/mnt/data": raise RuntimeError("Shell working directory mismatch")
+            if not result.stdout.strip().endswith("/mnt/data"): raise RuntimeError("Shell working directory mismatch")
         print(json.dumps({"mode": "live" if args.live else "offline", "session": mask_session_id(session_id), "runs": 2, "cwd_explicit_each_time": True}, ensure_ascii=False))
         return 0
     finally:

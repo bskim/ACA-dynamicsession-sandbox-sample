@@ -2,6 +2,7 @@
 .internal/
 /AGENTS.md
 /DEMO-PLAYBOOK.md
+/run-demo.ps1
 /*.code-workspace
 foundry-model-deployments*.json
 

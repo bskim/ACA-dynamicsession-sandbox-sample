@@ -49,16 +49,27 @@ def main() -> int:
         client = FakeDynamicSessionsClient(); model = fake_model()
     agent = DynamicSessionsCodingAgent(model, client, SessionRegistry(), owner="demo", conversation_id="coding", session_id=args.session_id)
     prompts = [
-        "Use execute_python to create /mnt/data/agent-demo/add.py with an intentionally broken add(a,b) returning a-b. Set turn_counter=1 and session_nonce='demo-nonce' in memory. Report creation.",
-        "In the same session, check turn_counter and session_nonce, increment the counter, load /mnt/data/agent-demo/add.py, and run assert add(2,3)==5 to demonstrate test failure. Do not catch AssertionError, use try/except, replace the assertion with a print, or repair the code in this turn. Let the tool return an actual failed execution, then report that observed failure.",
-        "In the same session fix /mnt/data/agent-demo/add.py so add returns a+b, execute it and assert add(2,3)==5. Print TEST PASSED and report the actual test result.",
+        "Use execute_python to set the global variables turn_counter = 1 and session_nonce = 'demo-nonce' directly in the Python interpreter globals, and write /mnt/data/agent-demo/add.py containing 'def add(a, b):\\n    return a - b\\n'. Report creation.",
+        "In the same session, verify turn_counter == 1 and session_nonce == 'demo-nonce' in globals, increment turn_counter += 1, exec(open('/mnt/data/agent-demo/add.py').read()), and run assert add(2,3)==5 to demonstrate test failure. Do not catch AssertionError, use try/except, replace the assertion with a print, or repair the code in this turn. Let the tool return an actual failed execution, then report that observed failure.",
+        "In the same session verify turn_counter == 2 in globals, fix /mnt/data/agent-demo/add.py so add returns a+b, execute it and assert add(2,3)==5. Print TEST PASSED and report the actual test result.",
     ]
     try:
         results = []
         for idx, prompt in enumerate(prompts, 1):
             if args.live:
-                print(f"[coding-agent] Running Turn {idx}/3 (Foundry LLM + Dynamic Session {mask_session_id(agent.session_id)})...", file=sys.stderr, flush=True)
-            results.append(agent.run_turn(prompt))
+                print(f"\n[coding-agent] === Turn {idx}/3 (Session {mask_session_id(agent.session_id)}) ===", file=sys.stderr, flush=True)
+                print(f"[coding-agent] Prompt: {prompt}", file=sys.stderr, flush=True)
+            turn_res = agent.run_turn(prompt)
+            if args.live:
+                for t in turn_res.turns:
+                    print(f"[coding-agent] Tool Result ({t.tool_name}): status={t.result.status}, stdout={t.result.stdout.strip()!r}, stderr={t.result.stderr.strip()!r}", file=sys.stderr, flush=True)
+                try:
+                    file_bytes = client.download_file(agent.session_id, "/mnt/data/agent-demo/add.py")
+                    print(f"[coding-agent] Current /mnt/data/agent-demo/add.py in session:\n{file_bytes.decode('utf-8').rstrip()}", file=sys.stderr, flush=True)
+                except Exception:
+                    pass
+                print(f"[coding-agent] Assistant: {turn_res.final_response}", file=sys.stderr, flush=True)
+            results.append(turn_res)
         if any(result.status != "completed" for result in results): raise RuntimeError("Agent did not complete all turns")
         if not results[0].turns or not any(t.result.status == "failed" and t.result.error_kind == "execution_failed" for t in results[1].turns):
             raise RuntimeError("Expected creation and failing test were not observed")

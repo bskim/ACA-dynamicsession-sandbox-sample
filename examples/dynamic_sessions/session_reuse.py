@@ -21,6 +21,8 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="Use the default offline simulation")
     parser.add_argument("--wire-profile", choices=("containerapp-1.3.0b5", "learn-properties"), default="containerapp-1.3.0b5", help="Select the execution wire profile explicitly; no automatic retry")
     parser.add_argument("--session-id", help="Reuse an explicitly supplied session identifier")
+    parser.add_argument("--step", choices=("all", "init", "reuse", "check"), default="all",
+                        help="Run all steps at once (default) or run init / reuse / check across separate CLI calls with --session-id")
     parser.add_argument("--wait-for-ttl", type=int, default=0, help="Live only: seconds to wait for the pool cooldown (charges apply)")
     args = parser.parse_args()
     if args.live and args.dry_run: parser.error("--live and --dry-run are mutually exclusive")
@@ -41,6 +43,58 @@ def main() -> int:
     original = "def add(a, b):\n    return a + b\n"
     nonce = secrets.token_hex(16)
     try:
+        if args.step != "all":
+            if not args.session_id:
+                parser.error("--step init/reuse/check requires an explicit --session-id")
+            if args.step == "init":
+                code = (
+                    "import os\nos.makedirs('/mnt/data/agent-demo', exist_ok=True)\n"
+                    "turn_counter = 100\n"
+                    f"nonce = {nonce!r}\n"
+                    f"open({filename!r}, 'w').write({original!r})\n"
+                    "print(f'initialized: turn_counter={turn_counter}, nonce={nonce}')"
+                )
+                res = client.execute_python(a, code)
+                if res.status != "succeeded":
+                    raise RuntimeError("Init failed: " + res.stderr)
+                print(json.dumps({
+                    "step": "init",
+                    "session_id": args.session_id,
+                    "turn_counter": 100,
+                    "nonce": nonce,
+                    "file_created": filename,
+                    "stdout": res.stdout.strip(),
+                }, ensure_ascii=False, indent=2))
+                return 0
+            if args.step == "reuse":
+                code = (
+                    "import json, os\n"
+                    "exists = 'turn_counter' in globals()\n"
+                    "if exists:\n"
+                    "    turn_counter += 1\n"
+                    f"content = open({filename!r}).read() if os.path.exists({filename!r}) else None\n"
+                    "print(json.dumps({'variable_preserved': exists, 'turn_counter': globals().get('turn_counter'), 'nonce': globals().get('nonce'), 'file_content': content}))"
+                )
+                res = client.execute_python(a, code)
+                if res.status != "succeeded":
+                    raise RuntimeError("Reuse failed: " + res.stderr)
+                data = json.loads(res.stdout.strip().splitlines()[-1])
+                print(json.dumps({"step": "reuse", "session_id": args.session_id, **data}, ensure_ascii=False, indent=2))
+                return 0
+            if args.step == "check":
+                code = (
+                    "import json, os\n"
+                    "print(json.dumps({'variable_exists': 'turn_counter' in globals(), 'turn_counter': globals().get('turn_counter'), 'file_exists': os.path.exists(" + repr(filename) + ")}))"
+                )
+                res = client.execute_python(a, code)
+                if res.status != "succeeded":
+                    raise RuntimeError("Check failed: " + res.stderr)
+                data = json.loads(res.stdout.strip().splitlines()[-1])
+                print(json.dumps({"step": "check", "session_id": args.session_id, **data}, ensure_ascii=False, indent=2))
+                return 0
+
+        if args.live:
+            print(f"[session-reuse] 1/3 Session A ({mask_session_id(a)}): Turn 1 -> setting turn_counter=41, nonce, and writing {filename}", file=sys.stderr, flush=True)
         result = client.execute_python(a, "import os\nos.makedirs('/mnt/data/agent-demo', exist_ok=True)\nturn_counter = 41\nnonce = " + repr(nonce) + "\nopen(" + repr(filename) + ", 'w').write(" + repr(original) + ")")
         if result.status != "succeeded": raise RuntimeError("Turn 1 failed: " + result.stderr)
         expected_hash = hashlib.sha256(original.encode()).hexdigest()
@@ -51,6 +105,8 @@ def main() -> int:
         if result.status != "succeeded" or result.stdout.splitlines() != ["42", nonce]: raise RuntimeError("Turn 2 state mismatch")
         after = client.download_file(a, filename)
         if after == before or after != (original + "# modified\n").encode(): raise RuntimeError("File modification mismatch")
+        if args.live:
+            print(f"[session-reuse] 2/3 Session A ({mask_session_id(a)}): Turn 2 (SAME ID) -> turn_counter={result.stdout.splitlines()[0]} (preserved!), file modified={after != before}", file=sys.stderr, flush=True)
         negative = client.execute_python(b, "print('turn_counter' in globals())")
         if negative.status != "succeeded": raise RuntimeError("Negative-control execution failed: " + negative.stderr)
         if negative.stdout.strip() != "False": raise RuntimeError("Negative control leaked variables")
@@ -59,6 +115,8 @@ def main() -> int:
             from aca_agent_sample.dynamic_sessions import DynamicSessionsError
             if not isinstance(exc, DynamicSessionsError) or exc.status_code != 404: raise
         else: raise RuntimeError("Negative control leaked file")
+        if args.live:
+            print(f"[session-reuse] 3/3 Session B ({mask_session_id(b)}): DIFFERENT ID -> 'turn_counter' in globals() = False, {filename} = 404 Not Found (isolated!)", file=sys.stderr, flush=True)
         expiry = "skipped: use --live --wait-for-ttl after choosing the pool cooldown"
         if not args.live or args.wait_for_ttl:
             if args.live: time.sleep(args.wait_for_ttl)
