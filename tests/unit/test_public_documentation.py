@@ -159,3 +159,15 @@ def test_all_diagram_source_labels_are_rendered_without_historical_sandbox_resul
     assert all(value not in text for value in ("hello.sh", "282.964", "786.028", "3811.842"))
     text = text.replace("/openai/v1/", "").replace("OpenAI v1", "")
     assert not re.search(r"(?<![\w-])v[12](?![\w-])", text, re.IGNORECASE)
+
+
+@pytest.mark.parametrize("name", DOCUMENTS)
+def test_korean_public_documents_use_polite_sentence_endings(name):
+    text = (ROOT / (name + ".md")).read_text(encoding="utf-8")
+    no_code = re.sub(r"```.*?```", "", text, flags=re.S)
+    plain_endings = re.findall(
+        r"(?:한다|이다|된다|않는다|있다|없다|했다|됐다|인다|란다|시킨다|보관한다|확인한다|필요하다|제외한다|포함된다)\.(?=\s|$)",
+        no_code,
+    )
+    assert plain_endings == [], f"Plain-form endings found in {name}.md: {plain_endings}"
+
