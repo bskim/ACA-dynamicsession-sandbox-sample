@@ -14,7 +14,7 @@ A SandboxGroup is a management boundary and each sandbox is an isolated micro VM
 .\.venv\Scripts\python.exe examples\sandbox\snapshot_clone.py
 ```
 
-The default is an offline simulation. For live calls configure `.env` and RBAC and specify both `ENABLE_LIVE_AZURE=true` and `--live`. The command agent uses Foundry tool calls for remote commands and stop/resume between commands. Credentials are not sent inside the sandbox. This development example executes arbitrary model-proposed commands; additional controls are required before exposing it as a service.
+The default is an offline simulation. For live calls configure `.env` and RBAC and specify both `ENABLE_LIVE_AZURE=true` and `--live`. The command agent uses an installed CLI toolchain and a loopback tool server, stopping/resuming the same sandbox between two agent tasks. Credentials are not sent inside the sandbox. This development example executes arbitrary model-proposed commands; additional controls are required before exposing it as a service.
 
 | Behavior | Memory | Disk |
 | --- | --- | --- |
@@ -24,7 +24,9 @@ The default is an offline simulation. For live calls configure `.env` and RBAC a
 
 Even in Memory mode, revalidate external connections and tokens. A named snapshot is a separate group/region-scoped resource used to create a new sandbox clone. The example modifies the source and checks that the clone's file is independent. Do not confuse it with resuming an existing sandbox. Examples attempt to clean up their own sandboxes and snapshots; recover using the private manifest if cleanup fails. [Official Sandbox overview](https://learn.microsoft.com/en-us/azure/container-apps/sandboxes-overview) · [Lifecycle and state](https://learn.microsoft.com/en-us/azure/container-apps/sandboxes-snapshots-state-management).
 
-## Observed Azure results and interpretation (2026-11-05)
+## Historical v1 live results (2026-11-05)
+
+The hello.sh numbers below describe the previous minimal demo, not the current toolchain scenario or its performance.
 
 See the [deployment, execution and cleanup How-To](how-to-deploy-and-run-en.md) for reproduction. In `command_agent.py --live`, `gpt-5.4-mini` made three successful tool calls to create and run `/workspace/demo/hello.sh` and verify `Hello from demo script`. The measured example-main wall was about 49.2 s, including model, host, network and cleanup but excluding process startup and prior imports.
 
@@ -58,3 +60,31 @@ After creation, remote commands created the file, ran it, and verified output; t
 Explicit `create_snapshot` makes a group/region-scoped snapshot; `snapshot_id` creates a **new sandbox**. Source and clone were distinct, and after the source changed the clone kept its snapshot-time hash. This proves file independence, not clone RAM continuity. Lifecycle auto-suspend stop/resume is a different operation that resumes the same sandbox.
 
 In the observed live service, the default `ubuntu` image had no `/workspace`, so it was initialized after creation with `mkdir -p /workspace` from `/`. A GET following synchronous snapshot creation sometimes omitted `status`. In that case completion requires existence of the requested matching snapshot ID; `Creating` or failure statuses are not accepted as complete. Only observation GETs are retried for transient 404 within a deadline; snapshot creation POST is not automatically resent. These preview contracts can change by version.
+
+## v2: installed agent tools and an in-memory tool server
+
+`provision_agent_tools` runs `apt-get update` and `apt-get install -y --no-install-recommends git jq sqlite3` **inside the sandbox**, then installs `/usr/local/bin/agent-tool`, `repo-audit`, `agent-toolkit` and dedicated configuration. It does not install host tools or send Foundry credentials into the guest. Outbound access to Ubuntu package repositories and Python 3 in the guest image are required; installation adds time and cost. Provisioning runs once per sandbox.
+
+1. **Turn 1**: the Foundry model checks installed tool versions and invokes `repo-audit init` to create a Git repository, JSON configuration and SQLite audit database. It analyzes them using `git`, `jq`, `sqlite3` and shell pipelines, starts the installed `state_worker.py` repository-index server, then calls its loopback API using `agent-tool cached-audit`.
+2. **Host stop → resume**: the same sandbox resumes. The host compares successful execution and the SHA-256 fingerprint of installed files, package versions and configuration, plus server nonce, counter, RAM buffer and process-start identity. No tools are reinstalled and the server is not restarted.
+3. **Turn 2**: the model reuses existing CLIs and the running tool server, patches configuration with `jq`, and inserts `patched` into SQLite. `repo-audit verify` generates `verification.json`, independently checked by the host. The model can repair known command errors; uncertain execution outcomes are never automatically replayed.
+
+```powershell
+.\.venv\Scripts\python.exe examples\sandbox\command_agent.py --live
+.\.venv\Scripts\python.exe examples\sandbox\compare_snapshot_modes.py --live --iterations 3 --output-dir .internal\results\live-snapshot-compare-v2
+.\.venv\Scripts\python.exe examples\sandbox\snapshot_clone.py --live
+```
+
+| Evidence | Memory | Disk |
+| --- | --- | --- |
+| `installed_tool_preserved` | `true`: reuse CLI, packages and configuration | `true`: reuse CLI, packages and configuration |
+| `disk_preserved` | `true` | `true` |
+| `memory_preserved` | `true`: no index-server restart | `false`: old server absent |
+| `worker_restarted` | `false` | `true`: rerun the installed server program only |
+
+The explicit snapshot/clone example installs the real toolchain and sample project in the source. With zero provisioning calls, the clone immediately uses its installed CLIs to patch and verify the project. Source configuration and the clone's snapshot-time artifact are also checked for independent state. This does not claim clone RAM continuity. The default offline mode simulates these contracts and does not run apt or real guest binaries.
+
+
+### v2 observed live result (2026-11-05)
+
+The final gpt-5.4-mini run succeeded with one tool call for Turn 1 and two for Turn 2 (several CLIs per call), with no failed commands. `installed_tool_preserved=true`, Memory server `memory_preserved=true`/`worker_restarted=false`. The explicit clone also passed with zero clone provisioning calls and independent source configuration. Memory/Disk comparisons each passed all three samples. Sandboxes, snapshots, temporary group/resources and created roles were removed; `.env` was unchanged. All 317 unit tests passed. These checks do not imply zero execution charges.

@@ -247,7 +247,7 @@ finally {
 | --- | --- |
 | `reuse=passed`, counter 42, isolation `passed`; TTL experiment `state_lost` | [Dynamic Sessions](dynamic-sessions-en.md) |
 | Coding creation, expected failure and repaired test pass; Shell explicit cwd twice | [Dynamic Sessions](dynamic-sessions-en.md) |
-| Command agent's three tool calls and stop/resume; clone hash and isolation | [Sandbox](sandbox-en.md) |
+| v2 CLI installation, tool server and reuse after stop/resume; clone without reinstallation and state isolation | [Sandbox](sandbox-en.md) |
 | Both modes preserve files, Memory retains RAM, Disk restarts worker; stage latency | [Comparison experiment](snapshot-comparison-en.md) |
 
 ## Step 4: Cleanup and configuration restoration

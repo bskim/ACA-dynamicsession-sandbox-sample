@@ -26,6 +26,8 @@ Azure 성능 수치가 아니다. JSON/CSV의 `simulated` 필드로 구분한다
 
 ## 증거와 합격 조건
 
+- **v2 설치 도구 증거**: `/usr/local/bin/agent-tool --versions`를 재개 전후 실제 실행한다. git/jq/sqlite3 바이너리·버전, 커스텀 CLI 및 전용 설정 지문이 동일해야 `installed_tool_preserved=true`다. 양 모드 모두 재설치하지 않는다. 디스크 sentinel만 남거나 도구가 실행되지 않으면 실패다.
+- **v2 도구 서버**: 샘플 Git/JSON/SQLite 프로젝트의 파일 인덱스를 최초 시작 때 RAM에 구성한다. probe는 루프백 서버 API를 호출하며 인덱스 및 nonce·카운터는 디스크에서 복원하지 않는다.
 - 디스크 증거는 `sentinel.txt`의 고정 내용과 SHA-256이다. 최초 쓰기는
   `flush()`와 `os.fsync()`를 완료한다. 재시작은 기존 파일을 덮어쓰지 않는다.
 - RAM nonce, 64 KiB 난수 버퍼/체크섬, 프로세스 시작 지문과 카운터는 데몬의
@@ -72,7 +74,7 @@ README의 Sandbox 설정과 RBAC를 준비하고, 이미지에서 `python3`의 �
 `AcaSandboxAdapter`를 주입할 수 있다. 기존 설정/인증 계약을 따르고 private
 manifest를 지정한다. 동일 이미지/CPU/메모리/리전 설정을 유지해야 한다.
 기본 `ubuntu` 이미지에 `python3`가 있다고 가정하지 않는다. 이미지 준비와
-Python 설치는 측정 전에 별도 검증한다. 현재 모듈은 패키지 설치를 하지 않는다.
+Python 존재를 먼저 검증한다. 현재 모듈은 측정 전에 git/jq/sqlite3와 커스텀 CLI·설정을 실제 설치하며 Ubuntu 패키지 저장소 접근이 필요하다.
 
 모드 정책과 auto-delete 비활성화를 재조회하며, Memory 비교에는 볼륨을
 연결하지 않는다. backing type을 증명할 수 없는 볼륨도 보수적으로 거부한다.
@@ -81,7 +83,9 @@ sub-second SLO로 해석하지 않는다. 실험 결과와 적용 범위는 아�
 원시 관찰값은 공개 문서가 아닌 `.internal\results\`에 보관한다.
 
 
-## 실제 Azure 독립 표본 전체 (2026-11-05)
+## 이전 v1 실제 Azure 독립 표본 (2026-11-05)
+
+아래 수치는 설치 도구 검증을 추가하기 전의 워커 실험이다. v2 측정값과 혼합하지 않는다.
 
 [배포·실행·정리 How-To](how-to-deploy-and-run.md)를 준비한 후 `compare_snapshot_modes.py --live --iterations 3`으로 실행했습니다. `simulated=false`, 모드별 각 3개 신규 sandbox, 총 6개이며 전부 oracle 통과 및 cleanup 성공입니다. 모드 순서는 회차마다 교차했습니다. 프로비저닝과 fixture 설치는 4개 단계에서 제외했고 Data Disk는 연결하지 않았습니다.
 
@@ -118,3 +122,18 @@ sub-second SLO로 해석하지 않는다. 실험 결과와 적용 범위는 아�
 - `resume_to_running_ms`: resume 요청 시작부터 SDK 및 추가 GET의 Running 확인까지. Running 자체가 워크로드 준비를 의미하지는 않습니다.
 - `first_exec_probe_ms`: Running 확인 직후 첫 `echo ACA_EXEC_READY` 성공까지; 실행 API·네트워크 경로의 준비를 관측합니다.
 - `worker_ready_ms`: 첫 exec probe **이후** worker probe 완료까지의 추가 구간입니다. Memory는 기존 워커 응답을, Disk는 워커 부재 관찰 후 명시적 재시작까지 포함합니다. 전체 resume 시간이 아닙니다.
+
+## v2 실제 툴체인·인덱스 서버 결과 (2026-11-05)
+
+실제 Azure 6개 표본 모두 통과했다(`simulated=false`). 양 모드에서 git/jq/sqlite3·커스텀 CLI·설정이 재개 후 실행 가능하고 지문도 동일했다. 초기 인덱스는 프로젝트 파일 3개다. Memory는 nonce·버퍼 체크섬·프로세스 시작 지문과 counter 5→6을 유지했다. Disk는 bootstrap 전 서버가 없고 새 지문과 counter 1로 재기동했다. 재개 후 도구 재설치는 없으며 설치는 수명 주기 측정에서 제외했다.
+
+| 모드 | 회차 | 설치 도구 | 디스크 | 메모리 | 재기동 | Stop ms | Resume ms | 첫 exec ms | 서버 준비 ms |
+| --- | ---: | --- | --- | --- | --- | ---: | ---: | ---: | ---: |
+| Memory | 1 | true | true | true | false | 9106.398 | 1348.855 | 297.033 | 399.850 |
+| Disk | 1 | true | true | false | true | 6922.497 | 1452.435 | 213.394 | 936.704 |
+| Disk | 2 | true | true | false | true | 6802.469 | 1325.619 | 214.688 | 891.404 |
+| Memory | 2 | true | true | true | false | 8900.459 | 1087.710 | 252.034 | 412.084 |
+| Memory | 3 | true | true | true | false | 9503.373 | 1284.911 | 224.748 | 451.825 |
+| Disk | 3 | true | true | false | true | 6790.159 | 1437.641 | 205.635 | 987.945 |
+
+모드별 표본은 3개뿐이다. SDK polling을 포함한 클라이언트 관측값이며 SLA나 일반적인 성능 우열로 확대하지 않는다.

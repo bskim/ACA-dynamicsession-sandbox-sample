@@ -54,7 +54,7 @@ def test_comparison_cli_json_and_markdown(capsys):
     assert data["simulation"] is True and len(data["samples"]) == 4
     for sample in data["samples"]:
         oracle = sample["oracle"]
-        assert oracle["passed"] and oracle["disk_preserved"]
+        assert oracle["passed"] and oracle["disk_preserved"] and oracle["installed_tool_preserved"]
         assert oracle["memory_preserved"] == (sample["mode"] == "Memory")
         assert oracle["worker_restarted"] == (sample["mode"] == "Disk")
         assert sample["before"]["disk_sha256"] == sample["after"]["disk_sha256"]
@@ -84,6 +84,7 @@ def test_clone_isolation_and_cleanup():
     adapter = FakeSandboxAdapter()
     result = module.run_clone(adapter)
     assert result["passed"] and result["distinct_sandboxes"]
+    assert result["installed_tool_preserved"] and result["clone_provision_count"] == 0
     assert result["source_sha256_at_snapshot"] == result["clone_sha256_after_change"]
     assert result["source_sha256_after_change"] != result["clone_sha256_after_change"]
     assert not adapter.sandboxes and not adapter.snapshots
@@ -414,3 +415,17 @@ def test_readiness_role_exception_never_overrides_private_env_values(audit_repo)
     result = audit(audit_repo)
     assert result.returncode == 1 and "Private configuration value" in result.stdout
     assert role not in result.stdout + result.stderr
+
+
+
+def test_clone_parses_report_after_real_git_diff_output():
+    from aca_agent_sample.sandboxes.command_agent import PATCH_COMMAND
+    class DiffOutput(FakeSandboxAdapter):
+        def exec(self, sid, command, **kwargs):
+            from dataclasses import replace
+            result = super().exec(sid, command, **kwargs)
+            if command == PATCH_COMMAND and result.status == 'succeeded':
+                return replace(result, stdout='diff --git a/config.json b/config.json\n' + result.stdout + '\n')
+            return result
+    result = load_example('snapshot_clone').run_clone(DiffOutput())
+    assert result['clone_verification']['passed'] and result['source_project_unchanged']

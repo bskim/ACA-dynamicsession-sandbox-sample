@@ -28,7 +28,7 @@ A와 B는 독립적인 대안입니다. 모델을 사용하는 예제만 Foundry
 | 세션 재사용 | counter 42, nonce·파일 유지, 다른 ID 격리; 330초 대기 후 `state_lost` ([상세](docs/dynamic-sessions.md)) |
 | 코딩 에이전트 | 생성·예상 테스트 실패·수정 테스트 통과, 모델 턴 `[2,2,2]`, wall 약 61.9초 |
 | Shell | 2회 실행, 매번 cwd 명시, wall 약 5.0초 |
-| Sandbox 명령 에이전트 | 모델 도구 호출 3회 성공, 파일 생성·실행·출력 확인 ([상세](docs/sandbox.md)) |
+| Sandbox 명령 에이전트 | 실제 git/jq/sqlite3·전용 CLI 설치, 인덱스 도구 서버 호출, stop/resume 뒤 재설치 없는 패치·검증 ([상세](docs/sandbox.md)) |
 | Memory/Disk 비교 | 각 3표본 통과; 파일은 양쪽 보존, RAM은 Memory만 연속; worker 준비 평균 282.964/786.028ms ([전체 표](docs/snapshot-comparison.md)) |
 | 명시적 snapshot clone | 캡처 시점 해시 일치, 원본 수정 후 clone 파일 독립 ([상세](docs/sandbox.md)) |
 

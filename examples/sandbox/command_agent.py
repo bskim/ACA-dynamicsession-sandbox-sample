@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from aca_agent_sample.auth import create_credential, foundry_token_provider
 from aca_agent_sample.config import load_config
 from aca_agent_sample.model_client import FakeModelAdapter, FoundryOpenAIAdapter, ModelResponse, ToolCall
+from aca_agent_sample.sandboxes.command_agent import ANALYZE_COMMAND, PATCH_COMMAND
 from aca_agent_sample.sandboxes import AcaSandboxAdapter, FakeSandboxAdapter, SandboxCommandAgent
 
 
@@ -32,23 +33,23 @@ def main() -> None:
         print(f"Private recovery manifest: {manifest_path}")
         model = FoundryOpenAIAdapter(config.foundry_openai_base_url, config.foundry_model_deployment,
                                      foundry_token_provider(credential, config.tenant_id))
-        prompt = ("In the sandbox create /workspace/demo, write a small shell script there, execute it, "
-                  "and read its output in a subsequent command. Each command may stop and resume the sandbox.")
     else:
         adapter = FakeSandboxAdapter()
-        commands = ["mkdir -p /workspace/demo", "echo 'echo hello' > /workspace/demo/script.sh",
-                    "sh /workspace/demo/script.sh", "cat /workspace/demo/script.sh"]
+        commands = ['agent-tool --versions', 'repo-audit init', ANALYZE_COMMAND,
+                    'python3 /workspace/demo/state_worker.py start', 'agent-tool cached-audit']
         responses = [ModelResponse(tool_calls=(ToolCall(str(i), "run_sandbox_command", json.dumps({"command": command})),))
                      for i, command in enumerate(commands)]
-        model = FakeModelAdapter([*responses, ModelResponse("Sandbox demo complete.")])
-        prompt = "Create a working directory, write a result, and read it after resume."
+        patch = ModelResponse(tool_calls=(ToolCall('patch', 'run_sandbox_command', json.dumps({'command': PATCH_COMMAND})),))
+        cached = ModelResponse(tool_calls=(ToolCall('cache', 'run_sandbox_command', json.dumps({'command': 'agent-tool cached-audit'})),))
+        model = FakeModelAdapter([*responses, ModelResponse("Analysis complete."), cached, patch, ModelResponse("Sandbox demo complete.")])
     try:
-        result = SandboxCommandAgent(model, adapter, pause_between_commands=True).run(prompt)
-        for turn in result.turns:
-            print(f"{turn.tool_name}: {turn.result.status} {turn.result.stdout.strip()}")
-        print(result.final_response or result.status)
-        if result.status != "completed":
-            raise SystemExit(1)
+        agent = SandboxCommandAgent(model, adapter)
+        try:
+            result = agent.run_toolchain_demo()
+        except Exception:
+            print(json.dumps(getattr(agent, 'last_run', {}), indent=2), file=sys.stderr)
+            raise
+        print(json.dumps(result, indent=2))
     finally:
         if hasattr(model, "close"):
             model.close()

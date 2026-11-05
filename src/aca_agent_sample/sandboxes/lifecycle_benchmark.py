@@ -15,6 +15,7 @@ import time
 from typing import Any, Callable, Mapping
 
 from .client import _validate_mode
+from .agent_tools import provision_agent_tools
 
 WORKER_PATH = "/workspace/demo/state_worker.py"
 LATENCIES = ("stop_to_stopped_ms", "resume_to_running_ms", "first_exec_probe_ms", "worker_ready_ms")
@@ -52,6 +53,10 @@ class WorkerObservation:
     process_start_fingerprint: str | None = None
     pid: int | None = None
     worker_started: bool | None = None
+    installed_tool_runs: bool = False
+    toolchain_sha256: str | None = None
+    index_entry_count: int | None = None
+    index_sha256: str | None = None
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> WorkerObservation:
@@ -66,6 +71,11 @@ class WorkerObservation:
     @property
     def valid_disk(self) -> bool:
         return self.disk_exists is True and isinstance(self.disk_sha256, str) and bool(re.fullmatch(r"[0-9a-f]{64}", self.disk_sha256))
+
+    @property
+    def valid_tools(self) -> bool:
+        return (self.installed_tool_runs is True and isinstance(self.toolchain_sha256, str)
+                and bool(re.fullmatch(r"[0-9a-f]{64}", self.toolchain_sha256)))
 
     @property
     def valid_ram(self) -> bool:
@@ -86,6 +96,7 @@ class SnapshotModeOracle:
     worker_restarted: bool
     passed: bool
     failures: tuple[str, ...] = ()
+    installed_tool_preserved: bool = False
 
     @classmethod
     def evaluate(cls, mode: str, before: WorkerObservation | Mapping[str, Any],
@@ -104,6 +115,9 @@ def evaluate_mode_observation(mode: str, before: WorkerObservation | Mapping[str
     disk = before.valid_disk and after.valid_disk and before.disk_sha256 == after.disk_sha256
     if restarted is not None:
         disk = disk and restarted.valid_disk and restarted.disk_sha256 == before.disk_sha256
+    tools = before.valid_tools and after.valid_tools and before.toolchain_sha256 == after.toolchain_sha256
+    if restarted is not None:
+        tools = tools and restarted.valid_tools and restarted.toolchain_sha256 == before.toolchain_sha256
     memory = (before.valid_ram and after.valid_ram
               and before.worker_boot_nonce == after.worker_boot_nonce
               and before.buffer_checksum == after.buffer_checksum
@@ -120,6 +134,8 @@ def evaluate_mode_observation(mode: str, before: WorkerObservation | Mapping[str
     failures = []
     if not before.valid_ram:
         failures.append("invalid_baseline")
+    if not tools:
+        failures.append("installed_tool_not_preserved")
     if not disk:
         failures.append("disk_not_preserved")
     if mode == "Memory":
@@ -132,7 +148,7 @@ def evaluate_mode_observation(mode: str, before: WorkerObservation | Mapping[str
             failures.append("old_worker_still_running")
         if not restarted_ok:
             failures.append("worker_restart_not_proven")
-    return SnapshotModeOracle(mode, bool(disk), bool(memory), worker_restarted, not failures, tuple(failures))
+    return SnapshotModeOracle(mode, bool(disk), bool(memory), worker_restarted, not failures, tuple(failures), bool(tools))
 
 
 @dataclass
@@ -180,13 +196,13 @@ def metrics_to_json(samples: list[ModeComparisonMetrics]) -> str:
 def metrics_to_csv(samples: list[ModeComparisonMetrics]) -> str:
     output = io.StringIO(newline="")
     names = ["mode", "iteration", "simulated", "success", "failure_code", *LATENCIES,
-             "disk_preserved", "memory_preserved", "worker_restarted"]
+             "installed_tool_preserved", "disk_preserved", "memory_preserved", "worker_restarted"]
     writer = csv.DictWriter(output, fieldnames=names)
     writer.writeheader()
     for sample in samples:
         row = {name: getattr(sample, name) for name in names if hasattr(sample, name)}
         if sample.oracle:
-            row.update({name: getattr(sample.oracle, name) for name in names[-3:]})
+            row.update({name: getattr(sample.oracle, name) for name in names[-4:]})
         writer.writerow(row)
     return output.getvalue()
 
@@ -249,13 +265,17 @@ class SandboxLifecycleComparator:
             if (policy.auto_suspend.mode != mode or not policy.auto_suspend.enabled
                     or policy.auto_suspend.interval != self.auto_suspend_seconds or policy.auto_delete.enabled):
                 raise BenchmarkFailure("lifecycle_policy_mismatch")
+            provision_agent_tools(self.adapter, sid)
+            self._exec(sid, "repo-audit init")
             self._exec(sid, fixture_install_command(self.source))
             self._worker(sid, "start")
             for _ in range(3):
                 self._worker(sid, "increment")
             sample.before = self._worker(sid, "probe")
-            if not sample.before.valid_disk or not sample.before.valid_ram:
+            if not sample.before.valid_disk or not sample.before.valid_ram or not sample.before.valid_tools:
                 raise BenchmarkFailure("invalid_baseline")
+            if not sample.before.index_entry_count:
+                raise BenchmarkFailure('empty_tool_server_index')
             started = self.clock()
             self.adapter.stop(sid)
             if str(self.adapter.get(sid).state).casefold() not in {"stopped", "suspended"}:

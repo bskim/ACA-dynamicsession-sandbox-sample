@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from aca_agent_sample.auth import create_credential
 from aca_agent_sample.config import load_config
+from aca_agent_sample.sandboxes.agent_tools import provision_agent_tools, tool_evidence
 from aca_agent_sample.sandboxes.client import AcaSandboxAdapter, FakeSandboxAdapter, snapshot_is_ready
 
 ARTIFACT = "/workspace/clone-demo/artifact.txt"
@@ -60,6 +61,8 @@ def run_clone(adapter):
     existing_snapshots = set(adapter.snapshots)
     try:
         source = adapter.create(mode="Disk", auto_suspend_seconds=3600)
+        installed = provision_agent_tools(adapter, source)
+        execute(adapter, source, "repo-audit init")
         execute(adapter, source, "mkdir -p /workspace/clone-demo")
         execute(adapter, source, f"echo snapshot-original > {ARTIFACT}")
         original = artifact_hash(adapter, source)
@@ -71,6 +74,10 @@ def run_clone(adapter):
         cloned = adapter.clone(snapshot)
         if source == cloned:
             raise RuntimeError("Clone must be a different sandbox")
+        cloned_tools = tool_evidence(adapter, cloned)
+        if installed['toolchain_sha256'] != cloned_tools['toolchain_sha256']:
+            raise RuntimeError('Clone did not preserve installed executable tools/packages/config')
+        execute(adapter, cloned, 'repo-audit analyze')
         cloned_hash = artifact_hash(adapter, cloned)
         if cloned_hash != original:
             raise RuntimeError("Snapshot artifact hash mismatch")
@@ -79,10 +86,18 @@ def run_clone(adapter):
         after_hash = artifact_hash(adapter, cloned)
         if modified_hash == original or after_hash != original:
             raise RuntimeError("Clone isolation failed")
+        from aca_agent_sample.sandboxes.command_agent import PATCH_COMMAND
+        clone_report = json.loads(execute(adapter, cloned, PATCH_COMMAND).strip().splitlines()[-1])
+        source_project = json.loads(execute(adapter, source, 'repo-audit analyze'))
+        if source_project['config']['retries'] != 1 or source_project['config']['audit'] is not False:
+            raise RuntimeError('Clone patch affected source project')
         return {"mode": "offline" if getattr(adapter, "simulated", False) else "live",
                 "operation": "explicit_snapshot_clone", "artifact": ARTIFACT,
                 "source_sha256_at_snapshot": original, "clone_sha256": cloned_hash,
                 "source_sha256_after_change": modified_hash, "clone_sha256_after_change": after_hash,
+                "source_project_unchanged": True, "clone_verification": clone_report,
+                "installed_tool_preserved": True, "clone_provision_count": 0,
+                "tools_at_snapshot": installed, "tools_in_clone": cloned_tools,
                 "distinct_sandboxes": True, "isolation_after_clone": True, "passed": True,
                 "warning": "Explicit snapshot clone is separate from stop/resume; offline mode is simulated."}
     finally:

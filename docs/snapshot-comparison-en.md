@@ -26,6 +26,9 @@ fresh sandbox with identical settings, alternating mode order.
 
 ## Evidence and acceptance
 
+- **v2 installed tools**: actually run `/usr/local/bin/agent-tool --versions` before and after resume. git/jq/sqlite3 binaries and versions, custom CLI and configuration fingerprints must match for `installed_tool_preserved=true`. Neither mode reinstalls tools. A sentinel alone, missing tools or failed tool execution cannot pass.
+- **v2 tool server**: index the sample Git/JSON/SQLite project once in RAM. Probe calls the loopback server API; index and nonce/counter state are never reconstructed from a saved RAM-state file.
+
 - Disk evidence is fixed `sentinel.txt` content and its SHA-256. Initial writes
   complete `flush()` and `os.fsync()`. Restart never overwrites an existing file.
 - RAM nonce, a random 64 KiB buffer/checksum, process-start fingerprint, and counter
@@ -75,8 +78,7 @@ An explicitly enabled `AcaSandboxAdapter` can be injected into
 `SandboxLifecycleComparator(adapter).run(...)`. Follow the existing configuration/
 authentication contracts and provide a private recovery manifest. Keep image/CPU/
 memory/region identical. Do not assume the default `ubuntu` image has `python3`.
-Verify image preparation and Python availability outside measurement. This module
-never installs packages.
+Verify Python availability outside measurement. The module installs git/jq/sqlite3, custom CLIs and configuration before measurement; Ubuntu package repository access is required.
 
 The comparator reads back mode policy and disabled auto-delete. Do not attach
 volumes for Memory comparison; attachments with unverified backing types are also
@@ -85,7 +87,9 @@ they are not intrinsic platform latency or a sub-second SLO. The observed live r
 under private `.internal\results\`, not public documentation.
 
 
-## All independent Azure live samples (2026-11-05)
+## Historical v1 independent Azure live samples (2026-11-05)
+
+These worker-only measurements predate installed-tool validation and must not be mixed with v2 timings.
 
 After preparing the [deployment, execution and cleanup How-To](how-to-deploy-and-run-en.md), `compare_snapshot_modes.py --live --iterations 3` was run. All are `simulated=false`: three new sandboxes per mode, six total, all oracle-passed and cleaned up. Mode order alternated by iteration. Provisioning and fixture installation were outside the four stages; no Data Disk was attached.
 
@@ -122,3 +126,18 @@ With only three samples per mode, p95 is effectively the maximum of those three 
 - `resume_to_running_ms`: from resume request through SDK and additional GET confirming Running. Running alone does not mean workload ready.
 - `first_exec_probe_ms`: from just after Running until first successful `echo ACA_EXEC_READY`; observes execution API/network-path readiness.
 - `worker_ready_ms`: the additional interval **after** the first exec probe until worker probe completion. Memory checks the existing worker; Disk includes observing the missing worker and explicitly restarting it. This is not total resume time.
+
+## v2 live toolchain and index-server results (2026-11-05)
+
+All six real Azure samples passed (`simulated=false`). git/jq/sqlite3, custom CLI and configuration were executable with an unchanged fingerprint after resume in both modes. Each initial index had three project files. Memory kept nonce, buffer checksum and process identity with counter 5→6; Disk had no server before bootstrap and restarted it with a new identity and counter 1. No tools were reinstalled after resume. Installation is excluded from lifecycle timing.
+
+| Mode | Iteration | Installed tools | Disk | Memory | Restarted | Stop ms | Resume ms | First exec ms | Server ready ms |
+| --- | ---: | --- | --- | --- | --- | ---: | ---: | ---: | ---: |
+| Memory | 1 | true | true | true | false | 9106.398 | 1348.855 | 297.033 | 399.850 |
+| Disk | 1 | true | true | false | true | 6922.497 | 1452.435 | 213.394 | 936.704 |
+| Disk | 2 | true | true | false | true | 6802.469 | 1325.619 | 214.688 | 891.404 |
+| Memory | 2 | true | true | true | false | 8900.459 | 1087.710 | 252.034 | 412.084 |
+| Memory | 3 | true | true | true | false | 9503.373 | 1284.911 | 224.748 | 451.825 |
+| Disk | 3 | true | true | false | true | 6790.159 | 1437.641 | 205.635 | 987.945 |
+
+Only three observations per mode; these client-side measurements include SDK polling and are not an SLA or a general performance ranking.

@@ -28,7 +28,7 @@ In addition to offline examples and Foundry + simulated-backend integration, six
 | Session reuse | counter 42, nonce/file preserved and other ID isolated; `state_lost` after 330 seconds ([details](docs/dynamic-sessions-en.md)) |
 | Coding agent | creation, expected failing test and repaired test passed, model turns `[2,2,2]`, wall about 61.9 s |
 | Shell | 2 runs with explicit cwd each time, wall about 5.0 s |
-| Sandbox command agent | 3 model tool calls succeeded, file created, executed and output verified ([details](docs/sandbox-en.md)) |
+| Sandbox command agent | Real git/jq/sqlite3 and custom CLI installation, index-server calls, patch/verification after stop/resume without reinstallation ([details](docs/sandbox-en.md)) |
 | Memory/Disk comparison | 3 samples each passed; files retained in both, RAM continuity only in Memory; mean worker-ready 282.964/786.028 ms ([full tables](docs/snapshot-comparison-en.md)) |
 | Explicit snapshot clone | snapshot-time hash matched; clone file independent after source modification ([details](docs/sandbox-en.md)) |
 

@@ -8,6 +8,7 @@ from aca_agent_sample.config import SampleConfig
 from aca_agent_sample.model_client import FakeModelAdapter, ModelResponse, ToolCall
 from aca_agent_sample.sandboxes.client import AcaSandboxAdapter, FakeSandboxAdapter
 from aca_agent_sample.sandboxes.command_agent import SandboxCommandAgent, SandboxToolPolicy
+from aca_agent_sample.tool_policy import ToolPolicyError
 
 
 def poller(value):
@@ -333,3 +334,49 @@ def test_synchronous_snapshot_without_status_can_clone_after_matching_get():
 def test_snapshot_absence_or_explicit_pending_is_not_ready(snapshot):
     from aca_agent_sample.sandboxes.client import snapshot_is_ready
     assert not snapshot_is_ready(snapshot, "snapshot-1")
+
+
+@pytest.mark.parametrize('mode', ['Memory', 'Disk'])
+def test_installed_tools_preserved_without_reprovisioning(mode):
+    from aca_agent_sample.sandboxes.agent_tools import provision_agent_tools, tool_evidence
+    adapter = FakeSandboxAdapter()
+    sid = adapter.create(mode=mode)
+    assert adapter.exec(sid, 'agent-tool --versions').status == 'failed'
+    before = provision_agent_tools(adapter, sid)
+    adapter.stop(sid)
+    adapter.resume(sid)
+    assert tool_evidence(adapter, sid) == before
+    assert adapter.exec(sid, 'repo-audit init').status == 'succeeded'
+    adapter.cleanup()
+
+
+def test_toolchain_agent_uses_same_owned_sandbox_and_one_provision():
+    from aca_agent_sample.sandboxes.command_agent import ANALYZE_COMMAND, PATCH_COMMAND
+    from aca_agent_sample.sandboxes.agent_tools import provision_command
+    model = FakeModelAdapter([call('v', 'agent-tool --versions'), call('i', 'repo-audit init'),
+                              call('a', ANALYZE_COMMAND), call('start', 'python3 /workspace/demo/state_worker.py start'),
+                              call('cache', 'agent-tool cached-audit'), ModelResponse('analysis'),
+                              call('p', PATCH_COMMAND), ModelResponse('patched')])
+    adapter = FakeSandboxAdapter()
+    adapter.exec = Mock(wraps=adapter.exec)
+    adapter.stop = Mock(wraps=adapter.stop)
+    adapter.resume = Mock(wraps=adapter.resume)
+    result = SandboxCommandAgent(model, adapter).run_toolchain_demo()
+    assert result['passed'] and result['installed_tool_preserved']
+    adapter.stop.assert_called_once()
+    adapter.resume.assert_called_once_with(adapter.stop.call_args.args[0])
+    assert sum(c.args[1] == provision_command() for c in adapter.exec.call_args_list) == 1
+    assert not adapter.sandboxes
+
+
+def test_toolchain_agent_false_success_still_fails_and_cleans_up():
+    adapter = FakeSandboxAdapter()
+    with pytest.raises(RuntimeError):
+        SandboxCommandAgent(FakeModelAdapter([ModelResponse('done')]), adapter).run_toolchain_demo()
+    assert not adapter.sandboxes
+
+
+@pytest.mark.parametrize('command', ['echo x > /tmp/a', 'mkdir /var/tmp/x', 'mktemp'])
+def test_model_scratch_files_must_stay_inside_workspace(command):
+    with pytest.raises(ToolPolicyError):
+        SandboxToolPolicy().validate('run_sandbox_command', json.dumps({'command': command}))

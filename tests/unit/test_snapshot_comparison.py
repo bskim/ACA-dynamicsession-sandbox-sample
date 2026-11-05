@@ -24,7 +24,7 @@ from aca_agent_sample.sandboxes.lifecycle_benchmark import (
 
 
 def witness(**kwargs):
-    return replace(WorkerObservation(True, "d" * 64, True, "a" * 64, 5, "b" * 64, "c" * 64, 101), **kwargs)
+    return replace(WorkerObservation(True, "d" * 64, True, "a" * 64, 5, "b" * 64, "c" * 64, 101, installed_tool_runs=True, toolchain_sha256="9" * 64), **kwargs)
 
 
 def restarted(**kwargs):
@@ -245,7 +245,9 @@ def test_real_stdlib_worker_cli_disk_and_ram_separation():
         assert before["worker_alive"] and before["in_memory_counter"] == 1
         assert command("increment")["in_memory_counter"] == 2
         after = command("probe")
-        assert evaluate_mode_observation("Memory", before, after).passed
+        local = evaluate_mode_observation("Memory", before, after)
+        assert local.memory_preserved and local.disk_preserved
+        assert not local.installed_tool_preserved  # This Windows fixture test does not install Linux packages.
         assert command("start")["worker_started"] is False
         assert not command("stop")["worker_alive"]
         absent = command("probe")
@@ -253,7 +255,9 @@ def test_real_stdlib_worker_cli_disk_and_ram_separation():
         reboot = command("start")
         assert reboot["worker_boot_nonce"] != before["worker_boot_nonce"]
         assert reboot["buffer_checksum"] != before["buffer_checksum"]
-        assert evaluate_mode_observation("Disk", after, absent, reboot).passed
+        local = evaluate_mode_observation("Disk", after, absent, reboot)
+        assert local.worker_restarted and local.disk_preserved and not local.memory_preserved
+        assert not local.installed_tool_preserved
         assert {file.name for file in directory.iterdir()} == {"sentinel.txt"}
         content = (directory / "sentinel.txt").read_bytes()
         for field in ("worker_boot_nonce", "buffer_checksum", "process_start_fingerprint"):
@@ -290,3 +294,29 @@ def test_worker_flushes_and_fsyncs_disk_witness(monkeypatch):
     file.write.assert_called_once_with(module.SENTINEL_CONTENT)
     file.flush.assert_called_once()
     sync.assert_called_once_with(file.fileno.return_value)
+
+
+@pytest.mark.parametrize("mode", ["Memory", "Disk"])
+@pytest.mark.parametrize("change", [{"installed_tool_runs": False}, {"toolchain_sha256": "0" * 64}, {"toolchain_sha256": None}])
+def test_oracle_rejects_missing_changed_or_unexecutable_tools(mode, change):
+    after = witness(in_memory_counter=6, **change) if mode == "Memory" else witness(worker_alive=False, **change)
+    oracle = evaluate_mode_observation(mode, witness(), after, restarted() if mode == "Disk" else None)
+    assert not oracle.passed and not oracle.installed_tool_preserved
+    assert 'installed_tool_not_preserved' in oracle.failures
+
+
+@pytest.mark.parametrize("mode", ["Memory", "Disk"])
+def test_tool_provisioning_runs_once_before_stop_never_after_resume(mode):
+    from aca_agent_sample.sandboxes.agent_tools import provision_command
+    adapter = FakeSandboxAdapter()
+    adapter.exec = Mock(wraps=adapter.exec)
+    sample = SandboxLifecycleComparator(adapter).run_once(mode)
+    commands = [call.args[1] for call in adapter.exec.call_args_list]
+    assert commands.count(provision_command()) == 1
+    assert sample.oracle.installed_tool_preserved and sample.success
+    assert sample.before.toolchain_sha256 == sample.after.toolchain_sha256
+
+
+def test_disk_restart_cannot_repair_missing_installed_tool_evidence():
+    oracle = evaluate_mode_observation('Disk', witness(), witness(worker_alive=False), restarted(toolchain_sha256='0' * 64))
+    assert not oracle.passed and not oracle.installed_tool_preserved

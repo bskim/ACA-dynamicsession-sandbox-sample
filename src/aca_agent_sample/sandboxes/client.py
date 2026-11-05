@@ -333,6 +333,48 @@ class FakeSandboxAdapter:
             parts = shlex.split(command, posix=True)
             if not parts:
                 raise ValueError("Empty command")
+            from .agent_tools import provision_command, TOOL_PATH, CONFIG_PATH
+            if command == provision_command():
+                if TOOL_PATH in sandbox.files:
+                    raise ValueError("Tools are already provisioned")
+                sandbox.files[TOOL_PATH] = "simulated agent-tool-v1"
+                sandbox.files[CONFIG_PATH] = secrets.token_hex(16)
+                for name in ("git", "jq", "sqlite3"):
+                    sandbox.files[f"/usr/bin/{name}"] = f"simulated {name} package"
+                sandbox.files['/usr/local/bin/repo-audit'] = 'agent-tool'
+                return ToolExecutionResult("succeeded", stdout=json.dumps(self._tool_evidence(sandbox)), exit_code=0)
+            if parts[0] in (TOOL_PATH, '/usr/local/bin/repo-audit', 'repo-audit', 'agent-tool'):
+                if not self._tool_evidence(sandbox)['installed_tool_runs']:
+                    raise ValueError("Agent tools are not installed")
+                action = parts[1] if len(parts) == 2 else ''
+                if action == '--versions':
+                    data = self._tool_evidence(sandbox)
+                elif action == 'cached-audit':
+                    return self._worker_command(sandbox, 'increment')
+                elif action == 'init':
+                    sandbox.files['/workspace/agent-project/config.json'] = json.dumps({'service': 'demo', 'retries': 1, 'audit': False})
+                    sandbox.files['/workspace/agent-project/audit.db'] = 'initialized'
+                    data = {'initialized': True}
+                elif action in {'analyze', 'verify'}:
+                    data = {'config': json.loads(sandbox.files['/workspace/agent-project/config.json']),
+                            'events': sandbox.files['/workspace/agent-project/audit.db']}
+                    if action == 'verify':
+                        data['passed'] = data['config']['retries'] == 3 and data['config']['audit'] is True and 'patched' in data['events']
+                        sandbox.files['/workspace/agent-project/verification.json'] = json.dumps(data)
+                        if not data['passed']:
+                            raise ValueError('Patch validation failed')
+                else:
+                    raise ValueError('Unsupported simulated agent tool')
+                return ToolExecutionResult('succeeded', stdout=json.dumps(data), exit_code=0)
+            from .command_agent import ANALYZE_COMMAND, PATCH_COMMAND
+            if command == ANALYZE_COMMAND or command == PATCH_COMMAND:
+                if not self._tool_evidence(sandbox)['installed_tool_runs']:
+                    raise ValueError('Agent tools are not installed')
+                if command == PATCH_COMMAND:
+                    sandbox.files['/workspace/agent-project/config.json'] = json.dumps({'service': 'demo', 'retries': 3, 'audit': True})
+                    sandbox.files['/workspace/agent-project/audit.db'] += ',patched'
+                    return self.exec(sandbox_id, 'repo-audit verify')
+                return self.exec(sandbox_id, 'repo-audit analyze')
             if parts[0] == "python3":
                 from .lifecycle_benchmark import WORKER_PATH, decode_fixture_install
                 source = decode_fixture_install(parts)
@@ -373,6 +415,15 @@ class FakeSandboxAdapter:
         except ValueError as exc:
             return ToolExecutionResult("failed", stderr=str(exc), exit_code=1, error_kind="execution_failed")
 
+    @staticmethod
+    def _tool_evidence(sandbox: _FakeSandbox) -> dict:
+        from .agent_tools import TOOL_PATH, CONFIG_PATH
+        paths = (TOOL_PATH, CONFIG_PATH, '/usr/local/bin/repo-audit', '/usr/bin/git', '/usr/bin/jq', '/usr/bin/sqlite3')
+        installed = all(path in sandbox.files for path in paths)
+        digest = hashlib.sha256(json.dumps({path: sandbox.files.get(path) for path in paths}, sort_keys=True).encode()).hexdigest()
+        return {'installed_tool_runs': installed, 'toolchain_sha256': digest if installed else None,
+                'versions': {name: 'simulated' for name in ('git', 'jq', 'sqlite3')}}
+
     def _worker_command(self, sandbox: _FakeSandbox, action: str) -> ToolExecutionResult:
         if action not in {"start", "probe", "increment", "stop"}:
             raise ValueError("Unknown worker command")
@@ -384,7 +435,8 @@ class FakeSandboxAdapter:
             worker = {"worker_alive": True, "worker_boot_nonce": secrets.token_hex(32),
                       "in_memory_counter": 0,
                       "buffer_checksum": hashlib.sha256(secrets.token_bytes(65536)).hexdigest(),
-                      "process_start_fingerprint": secrets.token_hex(32), "pid": 101}
+                      "process_start_fingerprint": secrets.token_hex(32), "pid": 101,
+                      "tool_server_role": "repository-index-cache", "index_entry_count": 3, "index_sha256": hashlib.sha256(b'simulated repository index').hexdigest()}
             sandbox.memory["state_worker"] = worker
         if action == "increment" and worker is None:
             raise ValueError("Worker is not running")
@@ -395,6 +447,7 @@ class FakeSandboxAdapter:
             worker["in_memory_counter"] += 1
         data = {"disk_exists": path in sandbox.files,
                 "disk_sha256": hashlib.sha256(sandbox.files[path].encode()).hexdigest() if path in sandbox.files else None}
+        data.update(self._tool_evidence(sandbox))
         data.update(worker or {"worker_alive": False})
         if action == "start":
             data["worker_started"] = started

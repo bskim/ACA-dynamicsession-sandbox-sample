@@ -1,4 +1,4 @@
-"""Stdlib-only loopback RAM witness. Never persists RAM state or daemon output."""
+"""Loopback agent-tool daemon/index cache. RAM identity is never persisted."""
 from __future__ import annotations
 
 import argparse
@@ -19,13 +19,24 @@ SENTINEL_CONTENT = b"ACA sandbox lifecycle disk witness v1\n"
 BUFFER_SIZE = 65536
 
 
+def installed_tool_evidence() -> dict:
+    tool = Path('/usr/local/bin/agent-tool')
+    try:
+        result = subprocess.run([str(tool), '--versions'], capture_output=True, text=True, timeout=15, check=True)
+        evidence = json.loads(result.stdout)
+        return {'installed_tool_runs': evidence['installed_tool_runs'],
+                'toolchain_sha256': evidence['toolchain_sha256']}
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+        return {'installed_tool_runs': False, 'toolchain_sha256': None}
+
+
 def disk_evidence(directory: Path) -> dict:
     path = directory / "sentinel.txt"
     try:
         data = path.read_bytes()
     except FileNotFoundError:
-        return {"disk_exists": False, "disk_sha256": None}
-    return {"disk_exists": True, "disk_sha256": hashlib.sha256(data).hexdigest()}
+        return {"disk_exists": False, "disk_sha256": None} | installed_tool_evidence()
+    return {"disk_exists": True, "disk_sha256": hashlib.sha256(data).hexdigest()} | installed_tool_evidence()
 
 
 def request(port: int, action: str, timeout: float) -> dict | None:
@@ -47,7 +58,12 @@ def request(port: int, action: str, timeout: float) -> dict | None:
 
 def serve(port: int) -> None:
     # These values are created only in the daemon, never passed in argv or saved.
-    buffer = secrets.token_bytes(BUFFER_SIZE)
+    # Build a real repository index once; subsequent requests use only this RAM cache.
+    project = Path('/workspace/agent-project')
+    index = {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+             for path in project.glob('*') if path.is_file()}
+    index_digest = hashlib.sha256(json.dumps(index, sort_keys=True).encode()).hexdigest()
+    buffer = json.dumps(index, sort_keys=True).encode() + secrets.token_bytes(BUFFER_SIZE)
     nonce = secrets.token_hex(32)
     fingerprint = hashlib.sha256(f"{os.getpid()}:{time.monotonic_ns()}:{secrets.token_hex(32)}".encode()).hexdigest()
     counter = 0
@@ -58,14 +74,16 @@ def serve(port: int) -> None:
 
         def do_POST(self):
             nonlocal counter
-            if self.path not in {"/probe", "/increment", "/stop"}:
+            if self.path not in {"/probe", "/increment", "/stop", "/audit"}:
                 self.send_error(404)
                 return
             counter += 1
             body = json.dumps({"protocol": "aca-state-worker-v1", "worker_alive": True,
                                "worker_boot_nonce": nonce, "in_memory_counter": counter,
                                "buffer_checksum": hashlib.sha256(buffer).hexdigest(),
-                               "process_start_fingerprint": fingerprint, "pid": os.getpid()}).encode()
+                               "process_start_fingerprint": fingerprint, "pid": os.getpid(),
+                               "tool_server_role": "repository-index-cache", "index_entry_count": len(index),
+                               "index_sha256": index_digest}).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))

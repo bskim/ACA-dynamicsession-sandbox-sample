@@ -22,18 +22,18 @@ WARNING = "Memory mode does not support Data Disk volumes. Simulated timings are
 
 def render_markdown(samples):
     lines = ["# Memory vs. Disk lifecycle comparison", "", WARNING, "",
-             "Disk witness: `/workspace/demo/sentinel.txt` (SHA-256).", "",
-             "| Mode | Iteration | Disk SHA-256 preserved | worker_boot_nonce preserved | in_memory_counter continuous | buffer_checksum preserved | Memory preserved | Worker restarted | Oracle passed |",
-             "| --- | ---: | --- | --- | --- | --- | --- | --- | --- |"]
+             "Disk witnesses: installed git/jq/sqlite3 + agent-tool + package/config fingerprint; `/workspace/demo/sentinel.txt` (SHA-256). No reinstallation after resume. RAM witness: loopback agent-tool server/index cache.", "",
+             "| Mode | Iteration | Disk SHA-256 preserved | worker_boot_nonce preserved | in_memory_counter continuous | buffer_checksum preserved | Memory preserved | Worker restarted | Oracle passed | Installed tool preserved |",
+             "| --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- |"]
     for sample in samples:
         oracle, before, after = sample.oracle, sample.before, sample.after
         if oracle and before and after:
             nonce = bool(after.worker_alive and before.worker_boot_nonce == after.worker_boot_nonce)
             counter = bool(after.worker_alive and type(after.in_memory_counter) is int and after.in_memory_counter > before.in_memory_counter)
             checksum = bool(after.worker_alive and before.buffer_checksum == after.buffer_checksum)
-            values = [oracle.disk_preserved, nonce, counter, checksum, oracle.memory_preserved, oracle.worker_restarted, oracle.passed]
+            values = [oracle.disk_preserved, nonce, counter, checksum, oracle.memory_preserved, oracle.worker_restarted, oracle.passed, oracle.installed_tool_preserved]
         else:
-            values = ["n/a"] * 7
+            values = ["n/a"] * 8
         lines.append(f"| {sample.mode} | {sample.iteration} | " + " | ".join(map(str, values)) + " |")
     return "\n".join(lines) + "\n\n" + metrics_to_markdown(samples)
 
@@ -62,7 +62,8 @@ def main(argv: list[str] | None = None) -> int:
         samples = SandboxLifecycleComparator(adapter).run(iterations=args.iterations)
         data = json.loads(metrics_to_json(samples))
         data.update({"simulation": not args.live, "warning": WARNING,
-                     "disk_witness": "/workspace/demo/sentinel.txt"})
+                     "disk_witness": "/workspace/demo/sentinel.txt",
+                     "installed_tool_witness": "/usr/local/bin/agent-tool --versions"})
         reports = {"json": json.dumps(data, indent=2, allow_nan=False) + "\n",
                    "csv": metrics_to_csv(samples), "markdown": render_markdown(samples)}
         if args.output_dir is not None:
