@@ -78,6 +78,16 @@ $env:ENABLE_PROVISIONING = 'true'
 
 ![Memory와 Disk 재개 및 명시적 스냅샷 복제](docs/assets/sandbox-memory-vs-disk-snapshot.svg)
 
+외부 에이전트는 신뢰된 호스트의 정책 오케스트레이터와 원격 Foundry 모델로 구성되며, 추론·Azure 자격 증명을 sandbox에 주입하지 않습니다. 게스트에 오케스트레이터를 두고 토큰을 주입하면 비신뢰 코드나 프롬프트 인젝션에 의한 탈취 위험이 커지기 때문입니다. 도구 노출과 호출은 세 단계입니다.
+
+1. 호스트가 sandbox에 `git`, `jq`, `sqlite3`, 전용 CLI와 루프백 인메모리 도구 서버를 준비합니다.
+2. 모델은 프롬프트의 도구 목록을 보고 단일 `run_sandbox_command` 함수 호출에 셸 명령을 담습니다.
+3. 호스트가 인자를 검증하고 자신이 소유한 sandbox에 SDK로 명령을 전달한 뒤 결과를 모델에 돌려줍니다.
+
+문자열 검사는 `/workspace` 밖의 모든 접근을 막는 보안 경계가 아닙니다. 실제 동작과 제약은 [3단계 상세 설명](docs/sandbox.md#외부-에이전트의-도구-노출과-호출-3단계)을 참조하세요.
+
+**변경 수명 주기 분리:** 프롬프트·모델·오케스트레이션 로직을 이미지/스냅샷에 함께 굽지 않으므로 도구 계약이 호환되는 에이전트 변경은 sandbox 재생성 없이 가능합니다. 설치된 CLI와 서버 프로그램을 담은 골든 스냅샷은 다른 용도의 에이전트를 위한 clone에 재사용하고 기존 인스턴스는 stop/resume할 수 있습니다. 샘플의 `clone_provision_count=0`은 clone에서 재설치가 없었다는 뜻이지 다중 에이전트 연결·권한 분리가 이미 구현됐다는 뜻은 아닙니다. 게스트 도구나 계약 변경에는 스냅샷 갱신이 필요할 수 있습니다. [설계 및 제약](docs/sandbox.md#에이전트와-sandbox-변경-수명-주기-분리)
+
 `infra/sandbox/main.bicep`와 `scripts/setup-sandbox.ps1`은 **기존 데모 리소스 그룹**에 sandbox group을 배포합니다. 기본 실행은 dry run이며 실제 배포에는 `-Execute`와 PowerShell 환경 변수 `ENABLE_PROVISIONING=true`가 모두 필요합니다.
 
 ```powershell

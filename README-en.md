@@ -78,6 +78,16 @@ The first verifies ID A's memory variables and file, isolation of ID B, and simu
 
 ![Memory and Disk resume and explicit snapshot cloning](docs/assets/sandbox-memory-vs-disk-snapshot.svg)
 
+The external agent comprises a policy orchestrator on the trusted host and a remote Foundry model; inference and Azure credentials are not injected into the sandbox. Putting the orchestrator in the guest and injecting tokens would increase the risk of theft through untrusted code or prompt injection. Tool exposure and invocation have three stages:
+
+1. The host prepares `git`, `jq`, `sqlite3`, a custom CLI and a loopback in-memory tool server in the sandbox.
+2. The model uses the prompt's tool catalog to compose shell commands in a single `run_sandbox_command` function call.
+3. The host validates the arguments, forwards the command through the SDK to its own sandbox, and returns the result to the model.
+
+The string checks are not a security boundary preventing all access outside `/workspace`. See the [detailed three-stage explanation](docs/sandbox-en.md#exposing-and-invoking-tools-for-an-external-agent-three-stages) for actual behavior and limitations.
+
+**Decoupled update lifecycles:** prompts, models, and orchestration logic are not baked into the image/snapshot, so compatible agent changes do not require sandbox recreation. A golden snapshot containing installed CLIs and the server program can be reused for clones serving different agents, while an existing instance can be stopped/resumed. The sample's `clone_provision_count=0` means no tools were reinstalled in the clone, not that multi-agent connections or authorization isolation are already implemented. Guest tool or contract changes may require a snapshot update. [Design and limitations](docs/sandbox-en.md#decoupling-agent-and-sandbox-update-lifecycles)
+
 `infra/sandbox/main.bicep` and `scripts/setup-sandbox.ps1` deploy a sandbox group in an **existing demo resource group**. The default is a dry run; actual deployment requires both `-Execute` and the PowerShell environment variable `ENABLE_PROVISIONING=true`.
 
 ```powershell
