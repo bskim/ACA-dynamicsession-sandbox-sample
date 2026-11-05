@@ -34,11 +34,9 @@ def main() -> int:
         ]
         results = []
         for idx, cmd in enumerate(commands, 1):
-            if args.live:
-                print(f"[shell-agent] Run {idx}/2 (Session {mask_session_id(session_id)}): $ {cmd}", file=sys.stderr, flush=True)
+            print(f"[shell-agent] Run {idx}/2 (Session {mask_session_id(session_id)}): $ {cmd}", file=sys.stderr, flush=True)
             res = client.execute_shell(session_id, cmd)
-            if args.live:
-                print(f"[shell-agent] Run {idx}/2 stdout:\n{res.stdout.strip()}", file=sys.stderr, flush=True)
+            print(f"[shell-agent] Run {idx}/2 stdout:\n{res.stdout.strip()}", file=sys.stderr, flush=True)
             results.append(res)
         expected_lines = [
             ["/mnt/data"],

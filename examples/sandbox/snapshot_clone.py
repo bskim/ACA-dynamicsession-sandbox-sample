@@ -59,10 +59,8 @@ def run_clone(adapter):
     """Delete only resources created during this run, even after partial creation."""
     existing_sandboxes = set(adapter.sandboxes)
     existing_snapshots = set(adapter.snapshots)
-    is_live = type(adapter) is AcaSandboxAdapter
     def _progress(msg: str) -> None:
-        if is_live:
-            print(f"[snapshot-clone] {msg}", file=sys.stderr, flush=True)
+        print(f"[snapshot-clone] {msg}", file=sys.stderr, flush=True)
     try:
         from aca_agent_sample.sandboxes.lifecycle_benchmark import fixture_source, fixture_install_command, WORKER_PATH
         _progress("1/6 Creating source sandbox (Memory mode)...")

@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-DOCUMENTS = ["README", "SECURITY", *("docs/" + name for name in (
+DOCUMENTS = ["README", "DEMO-PLAYBOOK", "SECURITY", *("docs/" + name for name in (
     "architecture", "dynamic-sessions", "sandbox", "snapshot-comparison", "troubleshooting", "how-to-deploy-and-run"
 ))]
 
@@ -75,6 +75,14 @@ def test_sandbox_live_summaries_document_actual_evidence(suffix):
                        "memory_preserved": True, "worker_restarted": False, "passed": True}
     assert clone == {"mode": "live", "operation": "explicit_snapshot_clone",
                      "installed_tool_preserved": True, "clone_provision_count": 0,
+                     "clone_ram_preserved_from_snapshot": True, "clone_worker_restarted": False,
+                     "clone_memory_stop_resume_passed": True,
+                     "counter_progression": {
+                         "source_at_snapshot": 2,
+                         "clone_immediately_after_create": 3,
+                         "clone_after_own_memory_stop_resume": 4,
+                         "source_after_independent_probe": 3,
+                     },
                      "source_project_unchanged": True, "distinct_sandboxes": True,
                      "isolation_after_clone": True, "passed": True}
     for tool in ("git", "jq", "sqlite3", "agent-tool", "repo-audit", "state_worker.py"):

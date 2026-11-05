@@ -141,19 +141,17 @@ def run_coding_demo(agent: DynamicSessionsCodingAgent, client: Any, *, live: boo
     verifiers = (verify_turn_one, verify_turn_two, verify_turn_three)
     results = []
     for idx, (prompt, verifier) in enumerate(zip(prompts, verifiers), 1):
-        if live:
-            print(f"\n[coding-agent] === Turn {idx}/3 (Session {mask_session_id(agent.session_id)}) ===", file=sys.stderr, flush=True)
-            print(f"[coding-agent] Prompt: {prompt}", file=sys.stderr, flush=True)
+        print(f"\n[coding-agent] === Turn {idx}/3 (Session {mask_session_id(agent.session_id)}) ===", file=sys.stderr, flush=True)
+        print(f"[coding-agent] Prompt: {prompt}", file=sys.stderr, flush=True)
         turn_res = agent.run_turn(prompt)
-        if live:
-            for t in turn_res.turns:
-                print(f"[coding-agent] Tool Result ({t.tool_name}): status={t.result.status}, stdout={t.result.stdout.strip()!r}, stderr={t.result.stderr.strip()!r}", file=sys.stderr, flush=True)
-            try:
-                file_bytes = client.download_file(agent.session_id, "/mnt/data/agent-demo/add.py")
-                print(f"[coding-agent] Current /mnt/data/agent-demo/add.py in session:\n{file_bytes.decode('utf-8').rstrip()}", file=sys.stderr, flush=True)
-            except Exception:
-                pass
-            print(f"[coding-agent] Assistant: {turn_res.final_response}", file=sys.stderr, flush=True)
+        for t in turn_res.turns:
+            print(f"[coding-agent] Tool Result ({t.tool_name}): status={t.result.status}, stdout={t.result.stdout.strip()!r}, stderr={t.result.stderr.strip()!r}", file=sys.stderr, flush=True)
+        try:
+            file_bytes = client.download_file(agent.session_id, "/mnt/data/agent-demo/add.py")
+            print(f"[coding-agent] Current /mnt/data/agent-demo/add.py in session:\n{file_bytes.decode('utf-8').rstrip()}", file=sys.stderr, flush=True)
+        except Exception:
+            pass
+        print(f"[coding-agent] Assistant: {turn_res.final_response}", file=sys.stderr, flush=True)
         results.append(turn_res)
         if turn_res.status != "completed":
             raise RuntimeError("Agent did not complete all turns")

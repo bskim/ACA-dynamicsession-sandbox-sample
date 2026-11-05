@@ -2,7 +2,7 @@
 
 # 배포·실행·정리 How-To (Windows PowerShell)
 
-이 가이드는 전용 테스트 리소스 그룹에서 PythonLTS, 선택 Shell, Sandbox를 배포하고 실행한 뒤 정리하는 절차를 안내합니다. 실제 배포·실행·대기·Foundry 추론은 비용이 발생할 수 있습니다. 기존 Foundry나 다른 사용자의 리소스를 수정·삭제하지 마세요. `<YOUR_...>`는 사용자가 직접 교체하며 실제 값·토큰·결과는 비공개로 유지합니다. 각 경로는 독립적이므로 불필요한 풀이나 그룹은 생략하세요. (검증 기준일: 2026-11-05)
+이 가이드는 전용 테스트 리소스 그룹에서 PythonLTS, 선택 Shell, Sandbox를 배포하고 실행한 뒤 정리하는 절차를 안내합니다. 시나리오 1~6의 원클릭 실행(`.\run-demo.ps1`)과 출력 상세 해석은 [단계별 시나리오 플레이북](../DEMO-PLAYBOOK.md)을 함께 참조하세요. 실제 배포·실행·대기·Foundry 추론은 비용이 발생할 수 있습니다. 기존 Foundry나 다른 사용자의 리소스를 수정·삭제하지 마세요. `<YOUR_...>`는 사용자가 직접 교체하며 실제 값·토큰·결과는 비공개로 유지합니다. 각 경로는 독립적이므로 불필요한 풀이나 그룹은 생략하세요. (검증 기준일: 2026-11-05)
 
 ## 1단계: 사전 준비
 
@@ -194,7 +194,20 @@ Windows `az.cmd`에서 URL의 `&`가 명령 구분자로 해석될 수 있으므
 
 ## 3단계: 오프라인과 실제 시나리오 실행
 
-저장소 루트에서 실행하세요. 오프라인은 모의 백엔드만 사용하며 Azure 과금이 없습니다. 단위 테스트와 설치는 별도로 로컬 자원을 사용합니다.
+저장소 루트에서 통합 실행 스크립트(`run-demo.ps1`)로 시나리오 0~6을 바로 실행하거나(`.env`의 `ENABLE_LIVE_AZURE=true` 설정에 따라 라이브/오프라인 자동 전환, `-Offline` 스위치로 오프라인 강제 가능), 개별 Python 예제 스크립트를 직접 실행할 수 있습니다. 오프라인 모드는 모의 백엔드만 사용하므로 Azure 과금이 발생하지 않습니다.
+
+```powershell
+# 통합 실행 스크립트 (Step 0: 환경 확인, 1~3: Dynamic Sessions, 4~6: ACA Sandbox)
+.\run-demo.ps1 0
+.\run-demo.ps1 1
+.\run-demo.ps1 2
+.\run-demo.ps1 3
+.\run-demo.ps1 4
+.\run-demo.ps1 5
+.\run-demo.ps1 6
+```
+
+개별 Python 스크립트를 오프라인 모드로 직접 실행할 때:
 
 ```powershell
 $py = '.\.venv\Scripts\python.exe'
@@ -206,7 +219,7 @@ $py = '.\.venv\Scripts\python.exe'
 & $py .\examples\sandbox\snapshot_clone.py
 ```
 
-실제 실행은 `.env`의 `ENABLE_LIVE_AZURE=true` 및 `--live`가 필요합니다. 원시 결과와 manifest는 비공개입니다. 세션 식별자와 nonce를 공유하지 마세요. 아래 TTL은 300초 cooldown 풀에서 330초를 기다리며 비용이 추가될 수 있습니다. Shell만 별도 endpoint를 일시 사용합니다.
+실제 Azure 실행은 `.env`의 `ENABLE_LIVE_AZURE=true` 및 `--live`가 필요합니다. 원시 결과와 manifest는 비공개로 다루고 세션 식별자와 nonce를 공유하지 마세요. 아래 TTL 실험은 300초 cooldown 풀에서 330초를 기다리며 비용이 추가될 수 있습니다. Shell만 별도 endpoint를 일시 사용합니다.
 
 ```powershell
 & $py .\examples\dynamic_sessions\session_reuse.py --live
@@ -224,12 +237,12 @@ finally {
 & $py .\examples\sandbox\snapshot_clone.py --live
 ```
 
-| 확인 포인트 | 상세 |
-| --- | --- |
-| `reuse=passed`, counter 42, 격리 `passed`; TTL 실험 `state_lost` | [Dynamic Sessions](dynamic-sessions.md) |
-| coding 생성·예상 실패·수정 테스트 통과; Shell 2회 cwd 명시 | [Dynamic Sessions](dynamic-sessions.md) |
-| CLI 설치·도구 서버·stop/resume 재사용; clone 재설치 0회·독립성 | [Sandbox](sandbox.md) |
-| 양 모드 파일 보존, Memory RAM 연속성, Disk 워커 재시작 및 단계별 지연 | [비교 실험](snapshot-comparison.md) |
+| 시나리오 | 확인 포인트 | 상세 |
+| :---: | --- | --- |
+| **1** | `Session A` 연속 호출 시 `turn_counter` `100 → 101 → 102` 및 파일 유지, `Session B` 호출 시 변수(`false`/`null`)·파일(`false`) 격리; TTL 실험 `state_lost` | [Dynamic Sessions](dynamic-sessions.md) |
+| **2 & 3** | 코딩 에이전트 `/mnt/data/agent-demo/add.py` 생성(`a - b`) → `AssertionError` 실패 → 수정(`a + b`) 및 호스트 검증 통과; Shell 2회 `cwd` 명시 실행 | [Dynamic Sessions](dynamic-sessions.md) |
+| **4 & 6** | 외부 CLI(`git`/`jq`/`sqlite3`/`agent-tool`) 설치 + RAM 도구 서버 기동 및 `stop`/`resume` 재사용(`3 → 4`); 워밍업 스냅샷 복제 시 패키지 재설치 0회(`clone_provision_count=0`)·RAM 카운터 연속(`2 → 3 → 4`) 및 독립성 | [Sandbox](sandbox.md) |
+| **5** | 양 모드 설치 도구·파일 보존(`True`), `Memory` 모드만 RAM 도구 서버 무재기동 생존(`worker_restarted=false`) 및 단계별 지연 측정 | [비교 실험](snapshot-comparison.md) |
 
 ## 4단계: 정리와 설정 복원
 

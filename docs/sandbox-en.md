@@ -117,12 +117,10 @@ The guest's `exit_code`, `stdout`, and `stderr` are normalized into `ToolExecuti
 The explicit snapshot/clone example captures a source sandbox where the CLI toolchain is installed and the RAM index server is already running. With zero provisioning calls (`clone_provision_count=0`) and no process restart (`clone_worker_restarted=false`), the clone immediately uses the installed CLIs and warm RAM server, then verifies its own independent Memory mode stop/resume (`clone_memory_stop_resume_passed=true`) and state isolation from the source. The default offline mode simulates these contracts.
 
 
-### Observed live results (2026-11-05)
+### Observed live results and interpretation (2026-11-05)
 
-The final gpt-5.4-mini run succeeded with one tool call for Turn 1 and two for Turn 2 (several CLIs per call). It confirmed `installed_tool_preserved=true` and Memory server `memory_preserved=true`/`worker_restarted=false`. The explicit clone also passed with zero clone provisioning calls and independent source configuration. Memory/Disk comparisons each passed all three samples. Sandboxes, snapshots, temporary group/resources and created roles were removed; all 317 unit tests passed.
-
-
-Masked summary of `command_agent.py --live` (resource identifiers and observations omitted):
+#### Scenario 4: `command_agent.py --live` (`.\run-demo.ps1 4`)
+The `gpt-5.4-mini` run succeeded with one tool call in Turn 1 and two in Turn 2 (each combining multiple CLI commands).
 
 ```json
 {
@@ -135,7 +133,11 @@ Masked summary of `command_agent.py --live` (resource identifiers and observatio
 }
 ```
 
-Masked summary of `snapshot_clone.py --live`:
+- **`provision_count: 1` & `installed_tool_preserved: true`**: `git 2.56.0`, `jq-1.8.1`, `sqlite3 3.46.1`, and `/usr/local/bin/agent-tool` (`repo-audit`) were provisioned once after sandbox creation. Across `stop` → `resume` (`tools_before`, `tools_after_resume`, `tools_after_task`), the binaries and `toolchain_sha256` fingerprint remained identical, allowing Turn 2 patching and verification without reinstallation.
+- **`memory_preserved: true` & `worker_restarted: false`**: Because the sandbox stopped and resumed in `Memory` mode, the background loopback RAM index server (`state_worker.py`) remained alive without restarting, and its in-memory request counter (`in_memory_counter`, never written to disk) advanced continuously from `3` before `stop`/`resume` to `4` immediately after resume.
+
+#### Scenario 6: `snapshot_clone.py --live` (`.\run-demo.ps1 6`)
+This scenario captures an explicit snapshot (`create_snapshot`) of a source sandbox where both external CLI packages are installed and the background RAM index server is warmed up and running, then clones a new sandbox (`clone`):
 
 ```json
 {
@@ -143,6 +145,15 @@ Masked summary of `snapshot_clone.py --live`:
   "operation": "explicit_snapshot_clone",
   "installed_tool_preserved": true,
   "clone_provision_count": 0,
+  "clone_ram_preserved_from_snapshot": true,
+  "clone_worker_restarted": false,
+  "clone_memory_stop_resume_passed": true,
+  "counter_progression": {
+    "source_at_snapshot": 2,
+    "clone_immediately_after_create": 3,
+    "clone_after_own_memory_stop_resume": 4,
+    "source_after_independent_probe": 3
+  },
   "source_project_unchanged": true,
   "distinct_sandboxes": true,
   "isolation_after_clone": true,
@@ -150,4 +161,9 @@ Masked summary of `snapshot_clone.py --live`:
 }
 ```
 
-These results show installed CLI reuse and file-state isolation in a new clone. See the [deployment, execution and cleanup How-To](how-to-deploy-and-run-en.md) for reproduction.
+- **Skipping both package reinstallation and process cold-start (`clone_provision_count: 0`, `clone_ram_preserved_from_snapshot: true`, `clone_worker_restarted: false`)**: Standard container images store only the filesystem and must cold-start background processes on every new instance. An ACA Sandbox snapshot captures both disk and running RAM processes, so the restored `clone` continues directly from the warmed-up state without rerunning `apt-get`, restarting the server, or rebuilding the in-memory index cache.
+- **How `counter_progression` (`2 → 3 → 4`, source at `3`) works**:
+  - `source_at_snapshot: 2`: The source sandbox starts the RAM index server (`1`) and runs one pre-snapshot probe (`2`) right before capturing the snapshot.
+  - `clone_immediately_after_create: 3`: Immediately after creating the clone, probing the server without starting it returns `3`, continuing from the snapshot's in-memory counter (`2`).
+  - `clone_after_own_memory_stop_resume: 4`: Stopping and resuming the cloned sandbox itself in `Memory` mode preserves its RAM process, advancing the next probe from `3` to `4`.
+  - `source_after_independent_probe: 3`: Even after the clone reaches `4` and patches its project files/DB, the source sandbox remains an independent VM whose next probe returns `2 + 1 = 3` with its project configuration untouched (`source_project_unchanged: true`). See the [deployment, execution and cleanup How-To](how-to-deploy-and-run-en.md) for reproduction.

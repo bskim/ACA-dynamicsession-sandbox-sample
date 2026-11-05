@@ -206,7 +206,7 @@ function Test-Diagram([string]$file) {
     } catch { Fail "Invalid diagram XML or embedded data: $relative" }
 }
 $documents = @($paths | Where-Object { $_ -match '(?i)\.md$' } | ForEach-Object { Join-Path $root $_ })
-$requiredDocs = @('README.md', 'README-en.md', 'SECURITY.md', 'SECURITY-en.md')
+$requiredDocs = @('README.md', 'README-en.md', 'DEMO-PLAYBOOK.md', 'DEMO-PLAYBOOK-en.md', 'SECURITY.md', 'SECURITY-en.md')
 foreach ($name in @('architecture', 'dynamic-sessions', 'sandbox', 'snapshot-comparison', 'troubleshooting', 'how-to-deploy-and-run')) {
     $requiredDocs += "docs/$name.md", "docs/$name-en.md"
 }

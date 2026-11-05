@@ -22,16 +22,16 @@ Dynamic Sessions와 ACA Sandbox는 각각 독립적으로 구성·실행할 수 
 
 ## 검증 범위
 
-다음은 실제 Azure 환경(2026-11-05 기준)에서 6개 예제 시나리오를 실행해 확인한 요약 결과입니다. 전체 배포·실행·정리 절차는 [배포·실행·정리 How-To](docs/how-to-deploy-and-run.md)를 참조하세요.
+다음은 실제 Azure 환경(2026-11-05 기준)에서 6개 예제 시나리오를 실행해 확인한 요약 결과입니다. 각 시나리오의 단계별 실행과 출력 해석은 [단계별 시나리오 플레이북](DEMO-PLAYBOOK.md), 전체 배포·실행·정리 절차는 [배포·실행·정리 How-To](docs/how-to-deploy-and-run.md)를 참조하세요.
 
 | 실제 라이브 시나리오 | 확인된 결과 |
 | --- | --- |
-| 세션 재사용 | counter 42, nonce·파일 유지, 다른 ID 격리; 330초 대기 후 `state_lost` ([상세](docs/dynamic-sessions.md)) |
-| 코딩 에이전트 | 생성·예상 테스트 실패·수정 테스트 통과, 모델 턴 `[2,2,2]`, wall 약 61.9초 |
-| Shell | 2회 실행, 매번 cwd 명시, wall 약 5.0초 |
-| Sandbox 명령 에이전트 | 실제 git/jq/sqlite3·전용 CLI 설치, 인덱스 도구 서버 호출, stop/resume 뒤 재설치 없는 패치·검증 ([상세](docs/sandbox.md)) |
-| Memory/Disk 비교 | 각 3표본 통과; 설치된 CLI 도구·파일은 양쪽 보존, RAM 도구 서버는 Memory만 연속; worker 준비 평균 421.253/938.684ms ([전체 표](docs/snapshot-comparison.md)) |
-| 명시적 snapshot clone | 패키지 재설치 0회(`clone_provision_count=0`) + 기동 중인 RAM 서버 즉시 복제(`clone_ram_preserved_from_snapshot=true`) + 복제본 자체 Memory stop/resume 및 상태 독립 ([상세](docs/sandbox.md)) |
+| 세션 재사용 (`.\run-demo.ps1 1`) | 동일 Session A 연속 호출 시 `turn_counter`가 `100 → 101 → 102`로 누적 증가하고 `nonce`·파일 유지, 다른 Session B는 변수(`false`/`null`)·파일(`false`) 완전 격리; 330초 대기 후 `state_lost` ([상세](docs/dynamic-sessions.md)) |
+| 코딩 에이전트 (`.\run-demo.ps1 2`) | `/mnt/data/agent-demo/add.py`에 버그 코드(`a - b`) 생성 → `AssertionError` 실패 확인 → `a + b`로 수정 및 호스트 검증 통과 ([상세](docs/dynamic-sessions.md)) |
+| Shell (`.\run-demo.ps1 3`) | 2회 실행을 통해 `/mnt/data/shell-demo/note.txt` 생성 및 조회, 매 실행마다 `cd /mnt/data` 명시 |
+| Sandbox 명령 에이전트 (`.\run-demo.ps1 4`) | 실제 `git`/`jq`/`sqlite3`·전용 CLI 설치 및 RAM 인덱스 서버 기동 → `stop`/`resume` 후 재설치 없이 기존 CLI와 RAM 서버(`in_memory_counter: 3 → 4`)를 재사용해 패치·검증 ([상세](docs/sandbox.md)) |
+| Memory/Disk 비교 (`.\run-demo.ps1 5`) | 각 3표본 통과; 설치된 CLI 도구·파일은 양쪽 모두 보존(`True`), 기동 중인 RAM 도구 서버는 `Memory` 모드만 재기동 없이 생존(`worker_restarted=false`) ([전체 표](docs/snapshot-comparison.md)) |
+| 명시적 snapshot clone (`.\run-demo.ps1 6`) | 패키지 설치 + RAM 서버 워밍업 상태 스냅샷 복제: 패키지 재설치 0회(`clone_provision_count=0`) + 프로세스 재시작 없이 RAM 카운터 연속(`2 → 3`) + 복제본 자체 Memory `stop`/`resume`(`3 → 4`) 및 원본(`3`)과 상태 독립 ([상세](docs/sandbox.md)) |
 
 TTL 만료 후 같은 ID에는 새 빈 세션이 할당됩니다. Memory/Disk 지연은 클라이언트와 polling을 포함한 관측값이며 Disk worker 준비에는 재기동이 포함됩니다. 실행과 스냅샷에 발생한 비용은 Cost Management에서 확인하세요.
 

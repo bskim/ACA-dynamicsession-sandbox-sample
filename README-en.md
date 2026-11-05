@@ -22,16 +22,16 @@ Dynamic Sessions and ACA Sandbox can be configured and run independently; only m
 
 ## Validation scope
 
-The table below summarizes the results observed when running the six scenarios in Azure (as of 2026-11-05). See the [deployment, execution and cleanup How-To](docs/how-to-deploy-and-run-en.md) for step-by-step instructions.
+The table below summarizes the results observed when running the six scenarios in Azure (as of 2026-11-05). See the [step-by-step scenario playbook](DEMO-PLAYBOOK-en.md) for walkthroughs and output interpretation, and the [deployment, execution and cleanup How-To](docs/how-to-deploy-and-run-en.md) for full provisioning and cleanup instructions.
 
 | Actual live scenario | Observed result |
 | --- | --- |
-| Session reuse | counter 42, nonce/file preserved and other ID isolated; `state_lost` after 330 seconds ([details](docs/dynamic-sessions-en.md)) |
-| Coding agent | creation, expected failing test and repaired test passed, model turns `[2,2,2]`, wall about 61.9 s |
-| Shell | 2 runs with explicit cwd each time, wall about 5.0 s |
-| Sandbox command agent | Real git/jq/sqlite3 and custom CLI installation, index-server calls, patch/verification after stop/resume without reinstallation ([details](docs/sandbox-en.md)) |
-| Memory/Disk comparison | 3 samples each passed; installed CLI tools and files retained in both, RAM tool-server continuity only in Memory; mean worker-ready 421.253/938.684 ms ([full tables](docs/snapshot-comparison-en.md)) |
-| Explicit snapshot clone | zero package reinstalls (`clone_provision_count=0`) + warm running RAM server cloned (`clone_ram_preserved_from_snapshot=true`) + clone's own Memory stop/resume and state isolation ([details](docs/sandbox-en.md)) |
+| Session reuse (`.\run-demo.ps1 1`) | Repeated calls on Session A advance `turn_counter` (`100 → 101 → 102`) while retaining `nonce` and files; Session B is isolated (`variable_exists=false`, `turn_counter=null`, `file_exists=false`); `state_lost` after 330 seconds ([details](docs/dynamic-sessions-en.md)) |
+| Coding agent (`.\run-demo.ps1 2`) | Creates buggy `/mnt/data/agent-demo/add.py` (`a - b`) → observes `AssertionError` failure → repairs to `a + b` and passes host verification ([details](docs/dynamic-sessions-en.md)) |
+| Shell (`.\run-demo.ps1 3`) | Creates and reads `/mnt/data/shell-demo/note.txt` across 2 runs with explicit `cd /mnt/data` each time |
+| Sandbox command agent (`.\run-demo.ps1 4`) | Installs `git`/`jq`/`sqlite3` and custom CLI, starts RAM index server, then after `stop`/`resume` reuses the CLI and running RAM server (`in_memory_counter: 3 → 4`) without reinstallation ([details](docs/sandbox-en.md)) |
+| Memory/Disk comparison (`.\run-demo.ps1 5`) | 3 samples each passed; installed CLI tools and files are preserved in both (`True`), while the running RAM tool server survives without restart only in `Memory` mode (`worker_restarted=false`) ([full tables](docs/snapshot-comparison-en.md)) |
+| Explicit snapshot clone (`.\run-demo.ps1 6`) | Clones a warm snapshot with installed packages + running RAM server: zero package reinstalls (`clone_provision_count=0`), RAM counter continues (`2 → 3`), clone passes its own Memory `stop`/`resume` (`3 → 4`), and remains isolated from source (`3`) ([details](docs/sandbox-en.md)) |
 
 After TTL expiry, the same ID is assigned a new empty session. Memory/Disk timings are client observations that include polling; Disk worker-ready includes restart. Check Cost Management for execution and snapshot charges.
 

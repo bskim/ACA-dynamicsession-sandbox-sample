@@ -98,13 +98,10 @@ class SandboxCommandAgent:
     def run_toolchain_demo(self, *, max_turns: int = 12) -> dict[str, Any]:
         """Two model tasks separated by one explicit stop/resume; provisioning runs once."""
         import sys
-        from .client import AcaSandboxAdapter
         self.last_run: dict[str, Any] = {}
         previous_ids = set(self.adapter.sandboxes)
-        is_live = type(self.adapter) is AcaSandboxAdapter
         def _progress(msg: str) -> None:
-            if is_live:
-                print(f"[sandbox-demo] {msg}", file=sys.stderr, flush=True)
+            print(f"[sandbox-demo] {msg}", file=sys.stderr, flush=True)
         try:
             _progress("1/6 Creating ACA Sandbox microVM...")
             sid = self.adapter.create(mode=self.mode, auto_suspend_seconds=3600)

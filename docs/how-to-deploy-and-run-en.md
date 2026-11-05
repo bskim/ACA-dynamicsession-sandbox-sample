@@ -2,7 +2,7 @@
 
 # Deployment, execution and cleanup How-To (Windows PowerShell)
 
-This guide walks through deploying PythonLTS, optional Shell, and Sandbox in a dedicated test resource group, running the scenarios, and cleaning up afterwards. Deployment, execution, waiting and Foundry inference may incur charges. Never modify or delete existing Foundry or other users' resources. Replace `<YOUR_...>` yourself; keep actual values, tokens and results private. The paths are independent, so skip unneeded pools or groups. (Validated as of 2026-11-05)
+This guide walks through deploying PythonLTS, optional Shell, and Sandbox in a dedicated test resource group, running the scenarios, and cleaning up afterwards. See also the [step-by-step scenario playbook](../DEMO-PLAYBOOK-en.md) for one-command execution (`.\run-demo.ps1`) and detailed output interpretation across Scenarios 1–6. Deployment, execution, waiting and Foundry inference may incur charges. Never modify or delete existing Foundry or other users' resources. Replace `<YOUR_...>` yourself; keep actual values, tokens and results private. The paths are independent, so skip unneeded pools or groups. (Validated as of 2026-11-05)
 
 ## Step 1: Prepare
 
@@ -194,7 +194,20 @@ Windows `az.cmd` can interpret URL `&` as a command separator, so separate query
 
 ## Step 3: Run offline and live scenarios
 
-Run from the repository root. Offline uses fake backends only and incurs no Azure charges. Unit tests and installation still use local resources.
+From the repository root, run Scenarios 0–6 using the unified runner script (`run-demo.ps1`, which automatically selects live or offline mode based on `ENABLE_LIVE_AZURE=true` in `.env`, or forces offline mode with `-Offline`), or invoke the Python example scripts directly. Offline mode uses fake backends only and incurs no Azure charges.
+
+```powershell
+# Unified runner script (Step 0: environment check, 1–3: Dynamic Sessions, 4–6: ACA Sandbox)
+.\run-demo.ps1 0
+.\run-demo.ps1 1
+.\run-demo.ps1 2
+.\run-demo.ps1 3
+.\run-demo.ps1 4
+.\run-demo.ps1 5
+.\run-demo.ps1 6
+```
+
+To run the individual Python scripts directly in offline mode:
 
 ```powershell
 $py = '.\.venv\Scripts\python.exe'
@@ -224,12 +237,12 @@ finally {
 & $py .\examples\sandbox\snapshot_clone.py --live
 ```
 
-| What to check | Details |
-| --- | --- |
-| `reuse=passed`, counter 42, isolation `passed`; TTL experiment `state_lost` | [Dynamic Sessions](dynamic-sessions-en.md) |
-| Coding creation, expected failure and repaired test pass; Shell explicit cwd twice | [Dynamic Sessions](dynamic-sessions-en.md) |
-| CLI installation, tool server and reuse after stop/resume; clone without reinstallation and state isolation | [Sandbox](sandbox-en.md) |
-| Both modes preserve files, Memory retains RAM, Disk restarts worker; stage latency | [Comparison experiment](snapshot-comparison-en.md) |
+| Scenario | What to check | Details |
+| :---: | --- | --- |
+| **1** | Repeated calls on `Session A` advance `turn_counter` `100 → 101 → 102` and preserve files, while `Session B` is isolated (`false`/`null`); TTL experiment returns `state_lost` | [Dynamic Sessions](dynamic-sessions-en.md) |
+| **2 & 3** | Coding agent creates `/mnt/data/agent-demo/add.py` (`a - b`) → observes `AssertionError` → repairs to `a + b` and passes host verification; Shell runs twice with explicit `cwd` | [Dynamic Sessions](dynamic-sessions-en.md) |
+| **4 & 6** | Installs external CLIs (`git`/`jq`/`sqlite3`/`agent-tool`) + starts RAM tool server and reuses across `stop`/`resume` (`3 → 4`); warm snapshot clone skips package reinstall (`clone_provision_count=0`), continues RAM counter (`2 → 3 → 4`), and stays isolated | [Sandbox](sandbox-en.md) |
+| **5** | Both modes preserve installed tools and files (`True`), while `Memory` mode keeps the running RAM tool server alive without restart (`worker_restarted=false`); stage latency | [Comparison experiment](snapshot-comparison-en.md) |
 
 ## Step 4: Cleanup and configuration restoration
 

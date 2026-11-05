@@ -117,12 +117,10 @@ sandbox 생성과 `/workspace` 초기화 후 호스트가 SDK의 `sandbox.exec(.
 명시적 snapshot/clone 예제는 실제 CLI 툴체인 설치와 RAM 인덱스 서버 기동까지 마친 원본을 스냅샷으로 캡처합니다. 복제된 clone은 프로비저닝 0회(`clone_provision_count=0`) 및 프로세스 재기동 없이(`clone_worker_restarted=false`) 즉시 CLI와 RAM 서버를 사용하고, 복제본 자체의 Memory 모드 stop/resume(`clone_memory_stop_resume_passed=true`) 및 원본과의 상태 독립성을 함께 검증합니다. 기본 오프라인 모드는 같은 계약을 모의합니다.
 
 
-### 실제 라이브 결과 (2026-11-05)
+### 실제 라이브 결과 및 해석 (2026-11-05)
 
-최종 gpt-5.4-mini 실행은 Turn 1 도구 호출 1회, Turn 2 2회(호출마다 여러 CLI 포함)로 성공했습니다. `installed_tool_preserved=true`, Memory 서버 `memory_preserved=true`/`worker_restarted=false`를 확인했습니다. 명시적 clone도 재설치 0회와 원본 설정 독립성 검증에 성공했습니다. Memory/Disk는 각각 3회 전부 통과했습니다. sandbox·snapshot·임시 그룹/리소스·생성 역할을 정리했고 단위 테스트는 317건 통과했습니다.
-
-
-`command_agent.py --live`의 마스킹된 요약 (리소스 식별자와 관찰 상세 제외):
+#### 시나리오 4: `command_agent.py --live` (`.\run-demo.ps1 4`)
+최종 `gpt-5.4-mini` 실행은 Turn 1 도구 호출 1회, Turn 2 2회(호출마다 여러 CLI 파이프라인 포함)로 성공했습니다.
 
 ```json
 {
@@ -135,7 +133,11 @@ sandbox 생성과 `/workspace` 초기화 후 호스트가 SDK의 `sandbox.exec(.
 }
 ```
 
-`snapshot_clone.py --live`의 마스킹된 요약:
+- **`provision_count: 1` & `installed_tool_preserved: true`**: 샌드박스 생성 직후 1회만 `git 2.56.0`, `jq-1.8.1`, `sqlite3 3.46.1` 및 `/usr/local/bin/agent-tool`(`repo-audit`)을 설치했으며, `stop` → `resume` 전후(`tools_before`, `tools_after_resume`, `tools_after_task`)에 실행 파일과 패키지 지문(`toolchain_sha256`)이 동일하게 유지되어 재설치 없이 Turn 2 패치·검증을 완료했습니다.
+- **`memory_preserved: true` & `worker_restarted: false`**: `Memory` 모드로 중지·재개했기 때문에 디스크 파일뿐 아니라 백그라운드 루프백 RAM 인덱스 서버(`state_worker.py`) 프로세스가 재기동 없이 그대로 살아 있으며, 파일에 기록되지 않는 RAM 요청 카운터(`in_memory_counter`)가 `stop`/`resume` 전 `3`에서 재개 직후 `4`로 이어서 증가했습니다.
+
+#### 시나리오 6: `snapshot_clone.py --live` (`.\run-demo.ps1 6`)
+외부 패키지 설치와 백그라운드 RAM 인덱스 서버 기동(워밍업)까지 마친 원본 샌드박스를 명시적 스냅샷(`create_snapshot`)으로 캡처하고 새 샌드박스(`clone`)로 복제한 결과입니다:
 
 ```json
 {
@@ -143,6 +145,15 @@ sandbox 생성과 `/workspace` 초기화 후 호스트가 SDK의 `sandbox.exec(.
   "operation": "explicit_snapshot_clone",
   "installed_tool_preserved": true,
   "clone_provision_count": 0,
+  "clone_ram_preserved_from_snapshot": true,
+  "clone_worker_restarted": false,
+  "clone_memory_stop_resume_passed": true,
+  "counter_progression": {
+    "source_at_snapshot": 2,
+    "clone_immediately_after_create": 3,
+    "clone_after_own_memory_stop_resume": 4,
+    "source_after_independent_probe": 3
+  },
   "source_project_unchanged": true,
   "distinct_sandboxes": true,
   "isolation_after_clone": true,
@@ -150,4 +161,9 @@ sandbox 생성과 `/workspace` 초기화 후 호스트가 SDK의 `sandbox.exec(.
 }
 ```
 
-이 결과는 새 clone에서 설치된 CLI 재사용과 파일 상태 독립성을 보여 줍니다. 재현 절차는 [배포·실행·정리 How-To](how-to-deploy-and-run.md)를 참조하세요.
+- **추가 패키지 설치 및 프로세스 재시작 생략 (`clone_provision_count: 0`, `clone_ram_preserved_from_snapshot: true`, `clone_worker_restarted: false`)**: 일반 컨테이너 이미지는 파일시스템만 저장하므로 시작할 때마다 백그라운드 프로세스를 새로 기동해야 하지만, ACA Sandbox 스냅샷은 디스크와 실행 중인 RAM 프로세스를 함께 캡처합니다. 따라서 스냅샷에서 복원된 `clone` 샌드박스는 `apt-get` 재설치나 서버 재시작·캐시 재구축 없이 곧바로 워밍업된 상태를 이어갑니다.
+- **`counter_progression` (`2 → 3 → 4`, 원본은 `3`)의 의미**:
+  - `source_at_snapshot: 2`: 원본 샌드박스에서 RAM 인덱스 서버를 시작(`1`)하고 스냅샷 직전 프로브(`2`)를 수행한 상태에서 스냅샷을 캡처했습니다.
+  - `clone_immediately_after_create: 3`: 복제 샌드박스 생성 직후 서버를 새로 시작하지 않고 프로브만 호출했는데도 스냅샷 시점의 RAM 값(`2`)에서 이어져 `3`을 반환했습니다.
+  - `clone_after_own_memory_stop_resume: 4`: 복제된 샌드박스를 자체적으로 `Memory` 모드로 `stop` → `resume`한 뒤 프로브를 호출하면 `3`에서 `4`로 이어집니다.
+  - `source_after_independent_probe: 3`: 복제본에서 카운터가 `4`까지 올라가고 설정 파일/DB를 패치했더라도, 원본 샌드박스는 독립된 VM이므로 자기 프로브 시 `2 + 1 = 3`을 반환하며 원본 프로젝트 설정(`source_project_unchanged: true`)도 그대로 유지됩니다. 재현 절차는 [배포·실행·정리 How-To](how-to-deploy-and-run.md)를 참조하세요.
