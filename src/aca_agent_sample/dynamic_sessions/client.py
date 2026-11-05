@@ -302,9 +302,15 @@ class FakeDynamicSessionsClient:
         return [{"name": name, "size": len(data)} for name, data in sorted(self._session(session_id)[1].items())]
 
     def execute_shell(self, session_id: str, command: str, timeout: int = 60) -> ToolExecutionResult:
-        self._session(session_id)
+        _, files = self._session(session_id)
         if command == "cd /mnt/data && pwd":
             return ToolExecutionResult("succeeded", stdout="/mnt/data\n", exit_code=0)
+        if command == "cd /mnt/data && mkdir -p shell-demo && echo 'hello-from-shell-session' > shell-demo/note.txt && pwd":
+            files["/mnt/data/shell-demo/note.txt"] = b"hello-from-shell-session\n"
+            return ToolExecutionResult("succeeded", stdout="/mnt/data\n", exit_code=0)
+        if command == "cd /mnt/data && cat shell-demo/note.txt && pwd":
+            data = files.get("/mnt/data/shell-demo/note.txt", b"").decode("utf-8")
+            return ToolExecutionResult("succeeded", stdout=f"{data}/mnt/data\n", exit_code=0)
         return ToolExecutionResult("failed", stderr="Unsupported offline shell command", exit_code=1, error_kind="execution_failed")
 
     def close(self) -> None: pass
