@@ -20,9 +20,11 @@ A design that bakes prompts, orchestration logic, model version, and business ru
 
 A reusable golden snapshot containing installed CLIs and the server program can serve as the basis for sandbox clones used by different agents, while an existing sandbox can be stopped and resumed. `clone_provision_count=0` in the public clone example shows that the new clone reused installed tools. Connecting multiple agents requires separate routing, ownership, and security controls; tool, guest configuration, or interface changes may require updating the snapshot.
 
-## Alternatives A / B
+## Alternatives A / B and selection trade-offs
 
-A routes an `identifier` to a PythonLTS session in `Microsoft.App/sessionPools`. The interpreter and files are reused for the same active ID, but are not guaranteed after idle expiry. Shell is a separate optional pool. B creates an isolated micro VM in `Microsoft.App/sandboxGroups`, and uses the SDK for exec, stop, resume, and deletion. Inside the sandbox it installs and controls the agent CLI toolchain (`git`, `jq`, `sqlite3`, and custom CLIs including `agent-tool` and `repo-audit`) and the loopback repository-index tool server (`state_worker.py`). Memory preserves RAM and root disk; Disk preserves the installed tools and root disk but restarts the server process. Creating a new clone from a named snapshot differs from resuming the existing instance. [A guide](dynamic-sessions-en.md) · [B guide](sandbox-en.md) · [State oracle](snapshot-comparison-en.md)
+A (`Dynamic Sessions`) routes an `identifier` to a PythonLTS or Shell session in `Microsoft.App/sessionPools`. Because the caller only needs to pass an `identifier` string while the session pool automatically handles allocation, routing, and idle cleanup, host implementation is very simple. In exchange, sessions cannot be manually stopped and resumed on demand or cloned from snapshots, and state is discarded once the idle cooldown expires.
+
+B (`ACA Sandbox`) creates an isolated micro VM in `Microsoft.App/sandboxGroups` and controls exec, stop, resume, snapshot, clone, and deletion through the SDK. It provides high flexibility: you can install an external CLI toolchain (`git`, `jq`, `sqlite3`, `agent-tool`, `repo-audit`) and a loopback repository-index server (`state_worker.py`), stop and resume at will in `Memory` (RAM + disk) or `Disk` mode, and clone pre-warmed snapshots. In exchange, the customer (host backend) must implement `sandbox_id` mapping per agent/user request and orchestrate the `stop`/`resume`/`delete` lifecycle. [A guide](dynamic-sessions-en.md) · [B guide](sandbox-en.md) · [State oracle](snapshot-comparison-en.md)
 
 ## Operational boundary
 
