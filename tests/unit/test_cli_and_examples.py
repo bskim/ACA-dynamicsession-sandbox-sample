@@ -121,6 +121,51 @@ def test_cli_forwards_example_help_and_rejects_invalid_iterations(capsys):
     assert exc.value.code == 2
 
 
+def test_coding_demo_rejects_cheating_model_without_real_file_and_function_fix():
+    from aca_agent_sample.dynamic_sessions import FakeDynamicSessionsClient, SessionRegistry
+    from aca_agent_sample.dynamic_sessions.coding_agent import DynamicSessionsCodingAgent
+    from aca_agent_sample.model_client import FakeModelAdapter, ModelResponse, ToolCall
+
+    path = ROOT / "examples" / "dynamic_sessions" / "coding_agent.py"
+    spec = importlib.util.spec_from_file_location("coding_agent_example", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    # 1. Model only prints 'created' -> 'assert False' -> 'print("TEST PASSED")' without creating add.py
+    cheating_scripts = [
+        "print('created')",
+        "assert False",
+        "print('TEST PASSED')",
+    ]
+    responses = []
+    for idx, script in enumerate(cheating_scripts, 1):
+        responses.extend([
+            ModelResponse(tool_calls=(ToolCall(f"c-{idx}", "execute_python", json.dumps({"code": script})),)),
+            ModelResponse(content=f"Turn {idx}"),
+        ])
+    client = FakeDynamicSessionsClient()
+    agent = DynamicSessionsCodingAgent(FakeModelAdapter(responses), client, SessionRegistry(), owner="demo", conversation_id="cheat-1")
+    with pytest.raises(RuntimeError):
+        module.run_coding_demo(agent, client, live=False)
+
+    # 2. Model creates broken add.py in Turn 1, fails in Turn 2, but only prints 'TEST PASSED' in Turn 3 without fixing add.py
+    unrepaired_scripts = [
+        "import os\nos.makedirs('/mnt/data/agent-demo', exist_ok=True)\nturn_counter = 1\nsession_nonce = 'demo-nonce'\nopen('/mnt/data/agent-demo/add.py', 'w').write('def add(a, b):\\n    return a - b\\n')",
+        "assert turn_counter == 1\nassert session_nonce == 'demo-nonce'\nturn_counter += 1\nexec(open('/mnt/data/agent-demo/add.py').read())\nassert add(2, 3) == 5",
+        "print('TEST PASSED')",
+    ]
+    responses2 = []
+    for idx, script in enumerate(unrepaired_scripts, 1):
+        responses2.extend([
+            ModelResponse(tool_calls=(ToolCall(f"u-{idx}", "execute_python", json.dumps({"code": script})),)),
+            ModelResponse(content=f"Turn {idx}"),
+        ])
+    client2 = FakeDynamicSessionsClient()
+    agent2 = DynamicSessionsCodingAgent(FakeModelAdapter(responses2), client2, SessionRegistry(), owner="demo", conversation_id="cheat-2")
+    with pytest.raises(RuntimeError, match="Host verification failed after Turn 3"):
+        module.run_coding_demo(agent2, client2, live=False)
+
+
 def remove_readonly(function, path, error):
     if not isinstance(error, PermissionError):
         raise error

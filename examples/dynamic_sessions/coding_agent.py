@@ -5,6 +5,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from aca_agent_sample.auth import create_credential, dynamic_sessions_token_provider, foundry_token_provider
@@ -29,6 +30,92 @@ def fake_model() -> FakeModelAdapter:
     return FakeModelAdapter(responses)
 
 
+def verify_turn_one(client: Any, session_id: str) -> None:
+    raw = client.download_file(session_id, "/mnt/data/agent-demo/add.py").decode("utf-8")
+    if "def add" not in raw:
+        raise RuntimeError("Turn 1 did not write add() to /mnt/data/agent-demo/add.py")
+    probe = client.execute_python(
+        session_id,
+        "assert turn_counter == 1\n"
+        "assert session_nonce == 'demo-nonce'\n"
+        "exec(open('/mnt/data/agent-demo/add.py').read())\n"
+        "assert add(2, 3) != 5\n"
+        "print('HOST_VERIFIED_BROKEN')",
+    )
+    if probe.status != "succeeded" or "HOST_VERIFIED_BROKEN" not in probe.stdout:
+        raise RuntimeError("Host verification failed after Turn 1: broken add.py or session variables missing")
+
+
+def verify_turn_two(client: Any, session_id: str) -> None:
+    probe = client.execute_python(
+        session_id,
+        "assert turn_counter == 2\n"
+        "assert session_nonce == 'demo-nonce'\n"
+        "exec(open('/mnt/data/agent-demo/add.py').read())\n"
+        "assert add(2, 3) != 5\n"
+        "print('HOST_VERIFIED_STILL_BROKEN')",
+    )
+    if probe.status != "succeeded" or "HOST_VERIFIED_STILL_BROKEN" not in probe.stdout:
+        raise RuntimeError("Host verification failed after Turn 2: expected turn_counter==2 and broken add.py")
+
+
+def verify_turn_three(client: Any, session_id: str) -> None:
+    raw = client.download_file(session_id, "/mnt/data/agent-demo/add.py").decode("utf-8")
+    if "def add" not in raw:
+        raise RuntimeError("Turn 3 did not preserve add() in /mnt/data/agent-demo/add.py")
+    probe = client.execute_python(
+        session_id,
+        "assert turn_counter == 2\n"
+        "assert session_nonce == 'demo-nonce'\n"
+        "exec(open('/mnt/data/agent-demo/add.py').read())\n"
+        "assert add(2, 3) == 5\n"
+        "assert add(10, -4) == 6\n"
+        "print('HOST_VERIFIED_REPAIRED')",
+    )
+    if probe.status != "succeeded" or "HOST_VERIFIED_REPAIRED" not in probe.stdout:
+        raise RuntimeError("Host verification failed after Turn 3: repaired add() did not pass host assertions")
+
+
+def run_coding_demo(agent: DynamicSessionsCodingAgent, client: Any, *, live: bool = False) -> dict[str, Any]:
+    prompts = [
+        "Use execute_python to set the global variables turn_counter = 1 and session_nonce = 'demo-nonce' directly in the Python interpreter globals, and write /mnt/data/agent-demo/add.py containing 'def add(a, b):\\n    return a - b\\n'. Report creation.",
+        "In the same session, verify turn_counter == 1 and session_nonce == 'demo-nonce' in globals, increment turn_counter += 1, exec(open('/mnt/data/agent-demo/add.py').read()), and run assert add(2,3)==5 to demonstrate test failure. Do not catch AssertionError, use try/except, replace the assertion with a print, or repair the code in this turn. Let the tool return an actual failed execution, then report that observed failure.",
+        "In the same session verify turn_counter == 2 in globals, fix /mnt/data/agent-demo/add.py so add returns a+b, execute it and assert add(2,3)==5. Print TEST PASSED and report the actual test result.",
+    ]
+    verifiers = (verify_turn_one, verify_turn_two, verify_turn_three)
+    results = []
+    for idx, (prompt, verifier) in enumerate(zip(prompts, verifiers), 1):
+        if live:
+            print(f"\n[coding-agent] === Turn {idx}/3 (Session {mask_session_id(agent.session_id)}) ===", file=sys.stderr, flush=True)
+            print(f"[coding-agent] Prompt: {prompt}", file=sys.stderr, flush=True)
+        turn_res = agent.run_turn(prompt)
+        if live:
+            for t in turn_res.turns:
+                print(f"[coding-agent] Tool Result ({t.tool_name}): status={t.result.status}, stdout={t.result.stdout.strip()!r}, stderr={t.result.stderr.strip()!r}", file=sys.stderr, flush=True)
+            try:
+                file_bytes = client.download_file(agent.session_id, "/mnt/data/agent-demo/add.py")
+                print(f"[coding-agent] Current /mnt/data/agent-demo/add.py in session:\n{file_bytes.decode('utf-8').rstrip()}", file=sys.stderr, flush=True)
+            except Exception:
+                pass
+            print(f"[coding-agent] Assistant: {turn_res.final_response}", file=sys.stderr, flush=True)
+        results.append(turn_res)
+        if turn_res.status != "completed":
+            raise RuntimeError("Agent did not complete all turns")
+        verifier(client, agent.session_id)
+    if not results[0].turns or not any(t.result.status == "failed" and t.result.error_kind == "execution_failed" for t in results[1].turns):
+        raise RuntimeError("Expected creation and failing test were not observed")
+    if not any(t.result.status == "succeeded" and "TEST PASSED" in t.result.stdout for t in results[2].turns):
+        raise RuntimeError("Expected passing test was not observed")
+    return {
+        "mode": "live" if live else "offline",
+        "session": mask_session_id(agent.session_id),
+        "creation": "passed",
+        "initial_test": "failed_as_expected",
+        "repair_test": "passed",
+        "model_turns": [r.model_turns for r in results],
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--live", action="store_true", help="Use Azure and Foundry, with explicit opt-in")
@@ -48,34 +135,9 @@ def main() -> int:
     else:
         client = FakeDynamicSessionsClient(); model = fake_model()
     agent = DynamicSessionsCodingAgent(model, client, SessionRegistry(), owner="demo", conversation_id="coding", session_id=args.session_id)
-    prompts = [
-        "Use execute_python to set the global variables turn_counter = 1 and session_nonce = 'demo-nonce' directly in the Python interpreter globals, and write /mnt/data/agent-demo/add.py containing 'def add(a, b):\\n    return a - b\\n'. Report creation.",
-        "In the same session, verify turn_counter == 1 and session_nonce == 'demo-nonce' in globals, increment turn_counter += 1, exec(open('/mnt/data/agent-demo/add.py').read()), and run assert add(2,3)==5 to demonstrate test failure. Do not catch AssertionError, use try/except, replace the assertion with a print, or repair the code in this turn. Let the tool return an actual failed execution, then report that observed failure.",
-        "In the same session verify turn_counter == 2 in globals, fix /mnt/data/agent-demo/add.py so add returns a+b, execute it and assert add(2,3)==5. Print TEST PASSED and report the actual test result.",
-    ]
     try:
-        results = []
-        for idx, prompt in enumerate(prompts, 1):
-            if args.live:
-                print(f"\n[coding-agent] === Turn {idx}/3 (Session {mask_session_id(agent.session_id)}) ===", file=sys.stderr, flush=True)
-                print(f"[coding-agent] Prompt: {prompt}", file=sys.stderr, flush=True)
-            turn_res = agent.run_turn(prompt)
-            if args.live:
-                for t in turn_res.turns:
-                    print(f"[coding-agent] Tool Result ({t.tool_name}): status={t.result.status}, stdout={t.result.stdout.strip()!r}, stderr={t.result.stderr.strip()!r}", file=sys.stderr, flush=True)
-                try:
-                    file_bytes = client.download_file(agent.session_id, "/mnt/data/agent-demo/add.py")
-                    print(f"[coding-agent] Current /mnt/data/agent-demo/add.py in session:\n{file_bytes.decode('utf-8').rstrip()}", file=sys.stderr, flush=True)
-                except Exception:
-                    pass
-                print(f"[coding-agent] Assistant: {turn_res.final_response}", file=sys.stderr, flush=True)
-            results.append(turn_res)
-        if any(result.status != "completed" for result in results): raise RuntimeError("Agent did not complete all turns")
-        if not results[0].turns or not any(t.result.status == "failed" and t.result.error_kind == "execution_failed" for t in results[1].turns):
-            raise RuntimeError("Expected creation and failing test were not observed")
-        if not any(t.result.status == "succeeded" and "TEST PASSED" in t.result.stdout for t in results[2].turns):
-            raise RuntimeError("Expected passing test was not observed")
-        print(json.dumps({"mode": "live" if args.live else "offline", "session": mask_session_id(agent.session_id), "creation": "passed", "initial_test": "failed_as_expected", "repair_test": "passed", "model_turns": [r.model_turns for r in results]}, ensure_ascii=False))
+        summary = run_coding_demo(agent, client, live=args.live)
+        print(json.dumps(summary, ensure_ascii=False))
         return 0
     finally:
         client.close()
