@@ -30,7 +30,7 @@ The table below summarizes the results observed when running the six scenarios i
 | Shell | 2 runs with explicit cwd each time, wall about 5.0 s |
 | Sandbox command agent | Real git/jq/sqlite3 and custom CLI installation, index-server calls, patch/verification after stop/resume without reinstallation ([details](docs/sandbox-en.md)) |
 | Memory/Disk comparison | 3 samples each passed; installed CLI tools and files retained in both, RAM tool-server continuity only in Memory; mean worker-ready 421.253/938.684 ms ([full tables](docs/snapshot-comparison-en.md)) |
-| Explicit snapshot clone | snapshot-time hash matched; zero clone tool reinstallations (`clone_provision_count=0`) and state independent after source modification ([details](docs/sandbox-en.md)) |
+| Explicit snapshot clone | zero package reinstalls (`clone_provision_count=0`) + warm running RAM server cloned (`clone_ram_preserved_from_snapshot=true`) + clone's own Memory stop/resume and state isolation ([details](docs/sandbox-en.md)) |
 
 After TTL expiry, the same ID is assigned a new empty session. Memory/Disk timings are client observations that include polling; Disk worker-ready includes restart. Check Cost Management for execution and snapshot charges.
 

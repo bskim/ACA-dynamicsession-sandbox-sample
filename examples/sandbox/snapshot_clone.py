@@ -64,31 +64,53 @@ def run_clone(adapter):
         if is_live:
             print(f"[snapshot-clone] {msg}", file=sys.stderr, flush=True)
     try:
-        _progress("1/5 Creating source sandbox...")
-        source = adapter.create(mode="Disk", auto_suspend_seconds=3600)
-        _progress("2/5 Installing agent CLI toolchain (git, jq, sqlite3, agent-tool) & initializing project on source...")
+        from aca_agent_sample.sandboxes.lifecycle_benchmark import fixture_source, fixture_install_command, WORKER_PATH
+        _progress("1/6 Creating source sandbox (Memory mode)...")
+        source = adapter.create(mode="Memory", auto_suspend_seconds=3600)
+        adapter.set_lifecycle_policy(source, mode="Memory", interval=3600)
+        _progress("2/6 Installing CLI toolchain (git, jq, sqlite3, agent-tool) & starting RAM index server on source...")
         installed = provision_agent_tools(adapter, source)
         execute(adapter, source, "repo-audit init")
+        execute(adapter, source, fixture_install_command(fixture_source()))
+        execute(adapter, source, f"python3 {WORKER_PATH} start")
+        source_worker_at_snapshot = json.loads(execute(adapter, source, f"python3 {WORKER_PATH} probe"))
+        if not source_worker_at_snapshot.get("worker_alive"):
+            raise RuntimeError("Source RAM index server did not start")
         execute(adapter, source, "mkdir -p /workspace/clone-demo")
         execute(adapter, source, f"echo snapshot-original > {ARTIFACT}")
         original = artifact_hash(adapter, source)
         expected = hashlib.sha256(b"snapshot-original\n").hexdigest()
         if original != expected:
             raise RuntimeError("Source artifact hash mismatch")
-        _progress("3/5 Capturing explicit named snapshot of tool-equipped source sandbox...")
+        _progress("3/6 Capturing explicit snapshot of warm source sandbox (disk + running RAM process)...")
         snapshot = adapter.create_snapshot(source, name=f"clone-demo-{uuid.uuid4().hex}")
         wait_for_snapshot(adapter, snapshot)
-        _progress("4/5 Cloning new sandbox from snapshot (reinstall=0) & verifying tool execution and isolation...")
+        _progress("4/6 Cloning new sandbox from snapshot (0 package reinstall + 0 process cold-start)...")
         cloned = adapter.clone(snapshot)
         if source == cloned:
             raise RuntimeError("Clone must be a different sandbox")
         cloned_tools = tool_evidence(adapter, cloned)
         if installed['toolchain_sha256'] != cloned_tools['toolchain_sha256']:
             raise RuntimeError('Clone did not preserve installed executable tools/packages/config')
+        cloned_worker_initial = json.loads(execute(adapter, cloned, f"python3 {WORKER_PATH} probe"))
+        if (not cloned_worker_initial.get("worker_alive")
+                or cloned_worker_initial.get("worker_boot_nonce") != source_worker_at_snapshot.get("worker_boot_nonce")
+                or cloned_worker_initial.get("in_memory_counter") != source_worker_at_snapshot["in_memory_counter"] + 1):
+            raise RuntimeError("Clone did not preserve warm running RAM process from snapshot")
         execute(adapter, cloned, 'repo-audit analyze')
         cloned_hash = artifact_hash(adapter, cloned)
         if cloned_hash != original:
             raise RuntimeError("Snapshot artifact hash mismatch")
+        _progress("5/6 Running Memory stop -> resume on the CLONED sandbox itself...")
+        adapter.set_lifecycle_policy(cloned, mode="Memory", interval=3600)
+        adapter.stop(cloned)
+        adapter.resume(cloned)
+        cloned_worker_after_resume = json.loads(execute(adapter, cloned, f"python3 {WORKER_PATH} probe"))
+        if (not cloned_worker_after_resume.get("worker_alive")
+                or cloned_worker_after_resume.get("worker_boot_nonce") != source_worker_at_snapshot.get("worker_boot_nonce")
+                or cloned_worker_after_resume.get("in_memory_counter") != cloned_worker_initial["in_memory_counter"] + 1):
+            raise RuntimeError("Cloned sandbox failed to preserve its own RAM across Memory stop/resume")
+        _progress("6/6 Verifying state isolation between source and clone (both disk and RAM)...")
         execute(adapter, source, f"echo source-modified > {ARTIFACT}")
         modified_hash = artifact_hash(adapter, source)
         after_hash = artifact_hash(adapter, cloned)
@@ -99,12 +121,23 @@ def run_clone(adapter):
         source_project = json.loads(execute(adapter, source, 'repo-audit analyze'))
         if source_project['config']['retries'] != 1 or source_project['config']['audit'] is not False:
             raise RuntimeError('Clone patch affected source project')
+        source_worker_after = json.loads(execute(adapter, source, f"python3 {WORKER_PATH} probe"))
+        if source_worker_after.get("in_memory_counter") != source_worker_at_snapshot["in_memory_counter"] + 1:
+            raise RuntimeError("Clone RAM activity leaked back into source RAM counter")
         return {"mode": "offline" if getattr(adapter, "simulated", False) else "live",
                 "operation": "explicit_snapshot_clone", "artifact": ARTIFACT,
                 "source_sha256_at_snapshot": original, "clone_sha256": cloned_hash,
                 "source_sha256_after_change": modified_hash, "clone_sha256_after_change": after_hash,
                 "source_project_unchanged": True, "clone_verification": clone_report,
                 "installed_tool_preserved": True, "clone_provision_count": 0,
+                "clone_ram_preserved_from_snapshot": True, "clone_worker_restarted": False,
+                "clone_memory_stop_resume_passed": True,
+                "counter_progression": {
+                    "source_at_snapshot": source_worker_at_snapshot["in_memory_counter"],
+                    "clone_immediately_after_create": cloned_worker_initial["in_memory_counter"],
+                    "clone_after_own_memory_stop_resume": cloned_worker_after_resume["in_memory_counter"],
+                    "source_after_independent_probe": source_worker_after["in_memory_counter"],
+                },
                 "tools_at_snapshot": installed, "tools_in_clone": cloned_tools,
                 "distinct_sandboxes": True, "isolation_after_clone": True, "passed": True,
                 "warning": "Explicit snapshot clone is separate from stop/resume; offline mode is simulated."}

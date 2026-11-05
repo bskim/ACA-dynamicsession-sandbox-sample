@@ -45,9 +45,9 @@ Host: prompt catalog + run_sandbox_command schema -> model tool call
 에이전트 프롬프트, 오케스트레이션 로직, 모델 버전, 비즈니스 규칙까지 게스트 이미지나 스냅샷에 함께 굽는다면 작은 에이전트 변경에도 이미지·스냅샷 갱신과 재배포가 필요해지는 강한 결합이 생깁니다. 반면 이 샘플은 호스트 에이전트와 게스트의 범용 CLI·리포지토리 감사/인덱스 도구를 분리합니다.
 
 1. 에이전트 업데이트 독립성: 도구 인터페이스와 호환성이 유지되면 모델 교체(예: `gpt-5.4-mini` → `gpt-5.4`), 프롬프트나 호스트 로직 수정, 코드 리뷰·보안 감사·패치 역할 추가에 sandbox 이미지나 스냅샷을 다시 만들 필요가 없습니다. 모델 교체 시 tool calling 지원과 권한은 확인해야 합니다.
-2. sandbox 재사용성: 무거운 CLI 패키지와 기본 서버 프로그램이 설치된 골든 스냅샷을 재사용해 서로 다른 에이전트 용도의 sandbox를 clone하거나 기존 인스턴스를 stop/resume할 수 있습니다. 재개는 같은 sandbox를 이어서 사용하고 clone은 새 sandbox를 생성합니다. clone 이후에 백그라운드 서버가 필요하면 새 인스턴스에서 서버를 시작합니다.
+2. sandbox 재사용성(패키지 설치 + 필수 프로세스 워밍업 상태 복제): 일반 컨테이너 이미지는 디스크에 설치된 패키지만 포함하므로 컨테이너 시작 시마다 백그라운드 프로세스(언어 서버, 로컬 인덱스/캐시 데몬 등)를 새로 기동해야 합니다. 반면 ACA Sandbox의 명시적 스냅샷은 무거운 CLI 패키지 설치뿐만 아니라 필수 백그라운드 서버 프로세스를 미리 기동·워밍업한 RAM 상태까지 함께 캡처합니다. 이 스냅샷에서 새 sandbox를 clone하면 패키지 설치 시간(`clone_provision_count=0`)과 프로세스 초기 기동 시간을 모두 절약할 수 있으며, 복제된 sandbox 역시 독립된 VM으로서 자체적인 `Memory` 모드 stop/resume을 이어갈 수 있습니다.
 
-`snapshot_clone.py`는 도구가 설치된 원본의 named snapshot으로 새 clone을 만들어 `clone_provision_count=0`을 확인합니다. `run_toolchain_demo`는 새 sandbox에 직접 도구를 설치합니다. 다양한 에이전트가 골든 스냅샷을 사용하려면 별도 연결·라우팅·소유권·권한 제어가 필요합니다. 게스트 도구, 이미지 설정이나 도구 계약이 변경되면 호환성 확인과 스냅샷 갱신이 필요할 수 있습니다.
+`snapshot_clone.py`는 도구를 설치하고 RAM 인덱스 서버를 기동한 원본의 named snapshot으로 새 clone을 만들어 `clone_provision_count=0`, `clone_ram_preserved_from_snapshot=true`, 그리고 복제본 자체의 Memory stop/resume(`clone_memory_stop_resume_passed=true`)을 함께 확인합니다. `run_toolchain_demo`는 새 sandbox에 직접 도구를 설치합니다. 다양한 에이전트가 골든 스냅샷을 사용하려면 별도 연결·라우팅·소유권·권한 제어가 필요합니다. 게스트 도구, 이미지 설정이나 도구 계약이 변경되면 호환성 확인과 스냅샷 갱신이 필요할 수 있습니다.
 
 ### 1단계 — 게스트 도구 계층 준비
 
@@ -114,7 +114,7 @@ sandbox 생성과 `/workspace` 초기화 후 호스트가 SDK의 `sandbox.exec(.
 | `memory_preserved` | `true`: 인덱스 서버 재기동 없음 | `false`: 기존 서버 없음 |
 | `worker_restarted` | `false` | `true`: 설치된 서버 프로그램만 다시 실행 |
 
-명시적 snapshot/clone 예제도 실제 툴체인과 샘플 프로젝트를 원본에 설치합니다. clone은 프로비저닝 0회로 설치된 CLI를 즉시 사용해 프로젝트를 패치하고 검증합니다. 원본 설정과 clone의 스냅샷 시점 아티팩트가 서로 독립적인지도 검사합니다. 기본 오프라인 모드는 같은 계약을 모의합니다.
+명시적 snapshot/clone 예제는 실제 CLI 툴체인 설치와 RAM 인덱스 서버 기동까지 마친 원본을 스냅샷으로 캡처합니다. 복제된 clone은 프로비저닝 0회(`clone_provision_count=0`) 및 프로세스 재기동 없이(`clone_worker_restarted=false`) 즉시 CLI와 RAM 서버를 사용하고, 복제본 자체의 Memory 모드 stop/resume(`clone_memory_stop_resume_passed=true`) 및 원본과의 상태 독립성을 함께 검증합니다. 기본 오프라인 모드는 같은 계약을 모의합니다.
 
 
 ### 실제 라이브 결과 (2026-11-05)

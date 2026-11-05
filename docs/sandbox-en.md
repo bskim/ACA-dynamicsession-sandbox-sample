@@ -45,9 +45,9 @@ Host: prompt catalog + run_sandbox_command schema -> model tool call
 If agent prompts, orchestration logic, model version, and business rules are baked into the guest image or snapshot, even a small agent change creates tight coupling by requiring an image or snapshot update and redeployment. This sample instead separates the host agent from the guest's general CLI and repository audit/indexing tools.
 
 1. Independent agent updates: while tool interfaces and compatibility remain stable, replacing the model (for example `gpt-5.4-mini` → `gpt-5.4`), editing prompts or host logic, or adding code review, security audit, or patching roles does not require rebuilding the sandbox image or snapshot. Verify tool-calling support and access when replacing the model.
-2. Sandbox reusability: reuse a golden snapshot with heavyweight CLI packages and the base server program installed to clone sandboxes for different agent roles, or stop/resume an existing instance. Resume continues the same sandbox, whereas a clone creates a separate sandbox. If a background server is needed in a clone, start the server on the cloned instance.
+2. Sandbox reusability (cloning both installed packages and warmed-up processes): standard container images capture only the disk filesystem, requiring background processes (such as language servers or local index/cache daemons) to cold-start on every new instance. An ACA Sandbox explicit snapshot captures both the installed CLI packages on disk and the running, warmed-up background server process in RAM. Cloning a new sandbox from this snapshot eliminates both package installation time (`clone_provision_count=0`) and process startup/warm-up time, and the cloned sandbox can subsequently run its own independent `Memory` mode stop/resume lifecycle.
 
-`snapshot_clone.py` makes a new clone from a named snapshot of a source with installed tools and checks `clone_provision_count=0`. `run_toolchain_demo` directly installs tools in a new sandbox. Having different agents use a golden snapshot requires separate integration, routing, ownership, and authorization controls. Guest tool, image configuration, or tool contract changes may require compatibility checks and a snapshot update.
+`snapshot_clone.py` creates a new clone from a named snapshot of a source sandbox with installed tools and a running RAM index server, verifying `clone_provision_count=0`, `clone_ram_preserved_from_snapshot=true`, and the clone's own Memory stop/resume (`clone_memory_stop_resume_passed=true`). `run_toolchain_demo` directly installs tools in a new sandbox. Having different agents use a golden snapshot requires separate integration, routing, ownership, and authorization controls. Guest tool, image configuration, or tool contract changes may require compatibility checks and a snapshot update.
 
 ### Stage 1 — Prepare the guest tool layer
 
@@ -114,7 +114,7 @@ The guest's `exit_code`, `stdout`, and `stderr` are normalized into `ToolExecuti
 | `memory_preserved` | `true`: no index-server restart | `false`: old server absent |
 | `worker_restarted` | `false` | `true`: rerun the installed server program only |
 
-The explicit snapshot/clone example installs the real toolchain and sample project in the source. With zero provisioning calls, the clone immediately uses its installed CLIs to patch and verify the project. Source configuration and the clone’s snapshot-time artifact are also checked for independent state. The default offline mode simulates these contracts.
+The explicit snapshot/clone example captures a source sandbox where the CLI toolchain is installed and the RAM index server is already running. With zero provisioning calls (`clone_provision_count=0`) and no process restart (`clone_worker_restarted=false`), the clone immediately uses the installed CLIs and warm RAM server, then verifies its own independent Memory mode stop/resume (`clone_memory_stop_resume_passed=true`) and state isolation from the source. The default offline mode simulates these contracts.
 
 
 ### Observed live results (2026-11-05)

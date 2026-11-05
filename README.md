@@ -30,7 +30,7 @@ A와 B는 독립적인 대안입니다. 모델을 사용하는 예제만 Foundry
 | Shell | 2회 실행, 매번 cwd 명시, wall 약 5.0초 |
 | Sandbox 명령 에이전트 | 실제 git/jq/sqlite3·전용 CLI 설치, 인덱스 도구 서버 호출, stop/resume 뒤 재설치 없는 패치·검증 ([상세](docs/sandbox.md)) |
 | Memory/Disk 비교 | 각 3표본 통과; 설치된 CLI 도구·파일은 양쪽 보존, RAM 도구 서버는 Memory만 연속; worker 준비 평균 421.253/938.684ms ([전체 표](docs/snapshot-comparison.md)) |
-| 명시적 snapshot clone | 캡처 시점 해시 일치, clone 도구 재설치 0회(`clone_provision_count=0`) 및 원본 수정 후 상태 독립 ([상세](docs/sandbox.md)) |
+| 명시적 snapshot clone | 패키지 재설치 0회(`clone_provision_count=0`) + 기동 중인 RAM 서버 즉시 복제(`clone_ram_preserved_from_snapshot=true`) + 복제본 자체 Memory stop/resume 및 상태 독립 ([상세](docs/sandbox.md)) |
 
 TTL 만료 후 같은 ID에는 새 빈 세션이 할당됩니다. Memory/Disk 지연은 클라이언트와 polling을 포함한 관측값이며 Disk worker 준비에는 재기동이 포함됩니다. 실행과 스냅샷에 발생한 비용은 Cost Management에서 확인하세요.
 
