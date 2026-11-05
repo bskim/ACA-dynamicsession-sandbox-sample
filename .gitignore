@@ -1,6 +1,7 @@
 # 비공개 운영 지침과 내부 조사·계획·기록
 .internal/
 /AGENTS.md
+/DEMO-PLAYBOOK.md
 /*.code-workspace
 foundry-model-deployments*.json
 

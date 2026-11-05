@@ -33,9 +33,22 @@ def verify_token_tenant(token: str, expected_tenant_id: str) -> None:
 
 
 def _provider(credential: AzureCliCredential, tenant_id: str, scope: str) -> Callable[[], str]:
+    import time
+    cached_token: str | None = None
+    cached_expires_on: float = 0.0
+
     def get_token() -> str:
-        token = credential.get_token(scope).token
+        nonlocal cached_token, cached_expires_on
+        now = time.time()
+        if cached_token is not None and cached_expires_on > now + 120:
+            return cached_token
+        access_token = credential.get_token(scope)
+        token = access_token.token
         verify_token_tenant(token, tenant_id)
+        expires_on = getattr(access_token, "expires_on", None)
+        if isinstance(expires_on, (int, float)) and expires_on > now + 120:
+            cached_token = token
+            cached_expires_on = float(expires_on)
         return token
     return get_token
 

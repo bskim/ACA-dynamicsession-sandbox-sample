@@ -97,16 +97,25 @@ class SandboxCommandAgent:
 
     def run_toolchain_demo(self, *, max_turns: int = 12) -> dict[str, Any]:
         """Two model tasks separated by one explicit stop/resume; provisioning runs once."""
+        import sys
+        from .client import AcaSandboxAdapter
         self.last_run: dict[str, Any] = {}
         previous_ids = set(self.adapter.sandboxes)
+        is_live = type(self.adapter) is AcaSandboxAdapter
+        def _progress(msg: str) -> None:
+            if is_live:
+                print(f"[sandbox-demo] {msg}", file=sys.stderr, flush=True)
         try:
+            _progress("1/6 Creating ACA Sandbox microVM...")
             sid = self.adapter.create(mode=self.mode, auto_suspend_seconds=3600)
             self.adapter.set_lifecycle_policy(sid, mode=self.mode, interval=3600)
             from .lifecycle_benchmark import fixture_source, fixture_install_command, WorkerObservation, evaluate_mode_observation
+            _progress("2/6 Installing external CLI toolchain (git, jq, sqlite3, agent-tool) & RAM index server...")
             installed = provision_agent_tools(self.adapter, sid)
             fixture = self.adapter.exec(sid, fixture_install_command(fixture_source()))
             if fixture.status != 'succeeded':
                 raise RuntimeError('Tool server installation failed')
+            _progress("3/6 Running Agent Turn 1 (Foundry LLM + sandbox tools & RAM cache)...")
             first = run_agent(self.model, _Executor(self.adapter, sid, False), self.policy, TURN_ONE, max_turns=max_turns)
             self.last_run["turn_one"] = asdict(first)
             if first.status != "completed" or not first.turns:
@@ -120,6 +129,7 @@ class SandboxCommandAgent:
             worker_before = WorkerObservation.from_mapping(json.loads(before.stdout))
             if not worker_before.valid_ram or not worker_before.index_entry_count:
                 raise RuntimeError('Agent did not start repository-index server')
+            _progress(f"4/6 Stopping and resuming sandbox (mode={self.mode})...")
             self.adapter.stop(sid)
             self.adapter.resume(sid)
             after = self.adapter.exec(sid, 'python3 /workspace/demo/state_worker.py probe')
@@ -132,6 +142,7 @@ class SandboxCommandAgent:
             resumed = tool_evidence(self.adapter, sid)
             if installed['toolchain_sha256'] != resumed['toolchain_sha256']:
                 raise RuntimeError('Installed toolchain changed across resume')
+            _progress("5/6 Running Agent Turn 2 (reusing installed CLI & RAM index server without reinstall)...")
             second = run_agent(self.model, _Executor(self.adapter, sid, False), self.policy, TURN_TWO, max_turns=max_turns)
             self.last_run["turn_two"] = asdict(second)
             if second.status != "completed" or not second.turns:
@@ -142,6 +153,7 @@ class SandboxCommandAgent:
             final_tools = tool_evidence(self.adapter, sid)
             if installed['toolchain_sha256'] != final_tools['toolchain_sha256']:
                 raise RuntimeError('Agent modified or reinstalled toolchain')
+            _progress("6/6 Verification passed! Cleaning up sandbox...")
             return {'mode': 'offline' if getattr(self.adapter, 'simulated', False) else 'live',
                     'provision_count': 1, 'installed_tool_preserved': True, 'stop_resume': True,
                     'tool_server_before': asdict(worker_before), 'tool_server_after': asdict(worker_after),

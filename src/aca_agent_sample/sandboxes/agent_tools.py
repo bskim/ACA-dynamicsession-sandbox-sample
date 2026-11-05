@@ -20,7 +20,7 @@ def provision_command() -> str:
     source = base64.b64encode(toolkit_source().encode()).decode()
     program = (
         "import base64,json,os,secrets,subprocess;from pathlib import Path;"
-        "subprocess.run(['apt-get','update','-qq'],check=True,timeout=120);"
+        "subprocess.run(['apt-get','-o','Acquire::Languages=none','-o','Acquire::GzipIndexes=true','update','-qq'],check=True,timeout=120);"
         "subprocess.run(['apt-get','install','-y','-qq','--no-install-recommends','git','jq','sqlite3'],"
         "check=True,timeout=180,env=dict(os.environ,DEBIAN_FRONTEND='noninteractive'));"
         f"p=Path('{TOOL_PATH}');p.write_bytes(base64.b64decode('{source}'));p.chmod(0o755);"

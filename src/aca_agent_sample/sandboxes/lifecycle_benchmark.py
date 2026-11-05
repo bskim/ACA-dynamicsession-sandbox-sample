@@ -258,13 +258,21 @@ class SandboxLifecycleComparator:
             raise ValueError("Iteration must be a positive integer")
         sample = ModeComparisonMetrics(mode, iteration, simulated=bool(getattr(self.adapter, "simulated", False)))
         previous_ids = set(self.adapter.sandboxes)
+        import sys
+        from .client import AcaSandboxAdapter
+        is_live = type(self.adapter) is AcaSandboxAdapter
+        def _progress(msg: str) -> None:
+            if is_live:
+                print(f"[compare-modes][{mode} #{iteration}] {msg}", file=sys.stderr, flush=True)
         try:
+            _progress("1/4 Creating sandbox & setting lifecycle policy...")
             sid = self.adapter.create(mode=mode, auto_suspend_seconds=self.auto_suspend_seconds, volumes=volumes)
             self.adapter.set_lifecycle_policy(sid, mode=mode, interval=self.auto_suspend_seconds)
             policy = self.adapter.get(sid).lifecycle
             if (policy.auto_suspend.mode != mode or not policy.auto_suspend.enabled
                     or policy.auto_suspend.interval != self.auto_suspend_seconds or policy.auto_delete.enabled):
                 raise BenchmarkFailure("lifecycle_policy_mismatch")
+            _progress("2/4 Installing agent CLI toolchain (git, jq, sqlite3, agent-tool) & starting RAM index server...")
             provision_agent_tools(self.adapter, sid)
             self._exec(sid, "repo-audit init")
             self._exec(sid, fixture_install_command(self.source))
@@ -276,6 +284,7 @@ class SandboxLifecycleComparator:
                 raise BenchmarkFailure("invalid_baseline")
             if not sample.before.index_entry_count:
                 raise BenchmarkFailure('empty_tool_server_index')
+            _progress("3/4 Stopping and resuming sandbox (measuring stop/resume/exec/worker latency)...")
             started = self.clock()
             self.adapter.stop(sid)
             if str(self.adapter.get(sid).state).casefold() not in {"stopped", "suspended"}:

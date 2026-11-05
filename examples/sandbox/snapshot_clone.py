@@ -59,8 +59,14 @@ def run_clone(adapter):
     """Delete only resources created during this run, even after partial creation."""
     existing_sandboxes = set(adapter.sandboxes)
     existing_snapshots = set(adapter.snapshots)
+    is_live = type(adapter) is AcaSandboxAdapter
+    def _progress(msg: str) -> None:
+        if is_live:
+            print(f"[snapshot-clone] {msg}", file=sys.stderr, flush=True)
     try:
+        _progress("1/5 Creating source sandbox...")
         source = adapter.create(mode="Disk", auto_suspend_seconds=3600)
+        _progress("2/5 Installing agent CLI toolchain (git, jq, sqlite3, agent-tool) & initializing project on source...")
         installed = provision_agent_tools(adapter, source)
         execute(adapter, source, "repo-audit init")
         execute(adapter, source, "mkdir -p /workspace/clone-demo")
@@ -69,8 +75,10 @@ def run_clone(adapter):
         expected = hashlib.sha256(b"snapshot-original\n").hexdigest()
         if original != expected:
             raise RuntimeError("Source artifact hash mismatch")
+        _progress("3/5 Capturing explicit named snapshot of tool-equipped source sandbox...")
         snapshot = adapter.create_snapshot(source, name=f"clone-demo-{uuid.uuid4().hex}")
         wait_for_snapshot(adapter, snapshot)
+        _progress("4/5 Cloning new sandbox from snapshot (reinstall=0) & verifying tool execution and isolation...")
         cloned = adapter.clone(snapshot)
         if source == cloned:
             raise RuntimeError("Clone must be a different sandbox")

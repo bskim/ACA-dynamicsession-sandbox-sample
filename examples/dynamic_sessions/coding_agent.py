@@ -54,7 +54,11 @@ def main() -> int:
         "In the same session fix /mnt/data/agent-demo/add.py so add returns a+b, execute it and assert add(2,3)==5. Print TEST PASSED and report the actual test result.",
     ]
     try:
-        results = [agent.run_turn(prompt) for prompt in prompts]
+        results = []
+        for idx, prompt in enumerate(prompts, 1):
+            if args.live:
+                print(f"[coding-agent] Running Turn {idx}/3 (Foundry LLM + Dynamic Session {mask_session_id(agent.session_id)})...", file=sys.stderr, flush=True)
+            results.append(agent.run_turn(prompt))
         if any(result.status != "completed" for result in results): raise RuntimeError("Agent did not complete all turns")
         if not results[0].turns or not any(t.result.status == "failed" and t.result.error_kind == "execution_failed" for t in results[1].turns):
             raise RuntimeError("Expected creation and failing test were not observed")
