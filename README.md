@@ -114,19 +114,6 @@ $env:ENABLE_PROVISIONING = 'true'
 
 기본 실행은 모의 결과입니다. `command_agent.py --live`는 Foundry와 연결해 원격 명령과 stop/resume을 수행합니다. 비교 예제는 `state_worker.py`의 RAM nonce·카운터와 디스크 SHA-256을 비교하고 단계별 시간을 보고합니다. `--live`는 실제 비용을 발생시키며 `--output-dir`은 민감한 원시 관찰을 비공개 경로에 저장해야 합니다. clone은 named snapshot에서 별도 sandbox를 생성하고 원본 변경으로부터 독립성을 검증합니다.
 
-## 통합 CLI
-
-소스 checkout에서 다음 CLI는 위와 같은 예제를 실행하며 같은 인자(`--live`, 비교 예제의 `--iterations`/`--format` 등)를 전달합니다. 아래 명령은 모두 기본 오프라인입니다.
-
-```powershell
-.\.venv\Scripts\aca-agent-sample.exe dynamic-session reuse
-.\.venv\Scripts\aca-agent-sample.exe dynamic-session coding-agent
-.\.venv\Scripts\aca-agent-sample.exe dynamic-session shell
-.\.venv\Scripts\aca-agent-sample.exe sandbox command-agent
-.\.venv\Scripts\aca-agent-sample.exe sandbox compare-modes --iterations 3 --format markdown
-.\.venv\Scripts\aca-agent-sample.exe sandbox snapshot-clone
-```
-
 ## 테스트, 정리 및 공개 검토
 
 ```powershell

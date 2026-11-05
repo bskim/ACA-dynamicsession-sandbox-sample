@@ -114,19 +114,6 @@ Resume latency is measured separately for Running, first exec and worker readine
 
 Runs are simulated by default. `command_agent.py --live` connects to Foundry for remote commands and stop/resume. The comparison uses `state_worker.py`’s RAM nonce/counter and disk SHA-256 oracle and reports stage timings. `--live` incurs actual costs; keep raw observations from `--output-dir` in a private directory. Clone creates a separate sandbox from a named snapshot and verifies independence from subsequent source changes.
 
-## Unified CLI
-
-From the source checkout, these CLI commands run the same examples and forward their arguments (`--live`, the comparison's `--iterations`/`--format`, and so on). All commands below default to offline.
-
-```powershell
-.\.venv\Scripts\aca-agent-sample.exe dynamic-session reuse
-.\.venv\Scripts\aca-agent-sample.exe dynamic-session coding-agent
-.\.venv\Scripts\aca-agent-sample.exe dynamic-session shell
-.\.venv\Scripts\aca-agent-sample.exe sandbox command-agent
-.\.venv\Scripts\aca-agent-sample.exe sandbox compare-modes --iterations 3 --format markdown
-.\.venv\Scripts\aca-agent-sample.exe sandbox snapshot-clone
-```
-
 ## Tests, cleanup and public review
 
 ```powershell

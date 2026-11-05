@@ -32,7 +32,7 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 `.env`에 자신의 `AZURE_SUBSCRIPTION_ID`, `AZURE_TENANT_ID`, `AZURE_LOCATION`, `FOUNDRY_OPENAI_BASE_URL=https://<YOUR_FOUNDRY_ACCOUNT>.openai.azure.com/openai/v1/`, 기존 `FOUNDRY_MODEL_DEPLOYMENT`, `FOUNDRY_API_MODE=chat_completions`, `FOUNDRY_TOKEN_SCOPE=https://ai.azure.com/.default`를 설정합니다. OpenAI 추론 URL은 project endpoint가 아닙니다. 미사용 항목을 포함해 남은 `<...>` placeholder는 자신의 값으로 바꾸거나 비우세요. 비밀키와 액세스 토큰은 저장하지 않습니다. `.env`는 Git 무시 대상이지만 암호화되지 않습니다. 로컬 계정 및 테넌트를 확인하고 프로세스 환경 변수가 `.env`보다 우선함에 유의하세요.
 
 ```powershell
-.\.venv\Scripts\aca-agent-sample.exe preflight config-check
+.\scripts\preflight.ps1
 .\.venv\Scripts\python.exe -m pytest tests\unit -q
 ```
 
@@ -222,23 +222,6 @@ finally {
 & $py .\examples\sandbox\command_agent.py --live
 & $py .\examples\sandbox\compare_snapshot_modes.py --live --iterations 3 --output-dir .internal\results\live-snapshot-compare
 & $py .\examples\sandbox\snapshot_clone.py --live
-```
-
-동일 예제는 설치된 CLI에서도 실행할 수 있습니다. Shell 명령에는 위와 같은 endpoint override를 적용하세요.
-
-```powershell
-.\.venv\Scripts\aca-agent-sample.exe dynamic-session reuse --live
-.\.venv\Scripts\aca-agent-sample.exe dynamic-session coding-agent --live
-$oldEndpoint = $env:DYNAMIC_SESSIONS_POOL_ENDPOINT
-$env:DYNAMIC_SESSIONS_POOL_ENDPOINT = $shellEndpoint
-try { .\.venv\Scripts\aca-agent-sample.exe dynamic-session shell --live }
-finally {
-    if ($null -eq $oldEndpoint) { Remove-Item Env:DYNAMIC_SESSIONS_POOL_ENDPOINT -ErrorAction SilentlyContinue }
-    else { $env:DYNAMIC_SESSIONS_POOL_ENDPOINT = $oldEndpoint }
-}
-.\.venv\Scripts\aca-agent-sample.exe sandbox command-agent --live
-.\.venv\Scripts\aca-agent-sample.exe sandbox compare-modes --live --iterations 3 --output-dir .internal\results\live-snapshot-compare
-.\.venv\Scripts\aca-agent-sample.exe sandbox snapshot-clone --live
 ```
 
 | 확인 포인트 | 상세 |

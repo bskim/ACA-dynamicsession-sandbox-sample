@@ -32,7 +32,7 @@ The recorded environment was Python 3.14.7 / Azure CLI 2.91.0 / local containera
 Set your own `AZURE_SUBSCRIPTION_ID`, `AZURE_TENANT_ID`, `AZURE_LOCATION`, `FOUNDRY_OPENAI_BASE_URL=https://<YOUR_FOUNDRY_ACCOUNT>.openai.azure.com/openai/v1/`, existing `FOUNDRY_MODEL_DEPLOYMENT`, `FOUNDRY_API_MODE=chat_completions`, and `FOUNDRY_TOKEN_SCOPE=https://ai.azure.com/.default` in `.env`. The OpenAI inference URL is not the project endpoint. Replace or clear remaining `<...>` placeholders including unused fields. Never store secret keys or access tokens. `.env` is Git-ignored, not encrypted. Verify the local account and tenant; process environment variables override `.env`.
 
 ```powershell
-.\.venv\Scripts\aca-agent-sample.exe preflight config-check
+.\scripts\preflight.ps1
 .\.venv\Scripts\python.exe -m pytest tests\unit -q
 ```
 
@@ -222,23 +222,6 @@ finally {
 & $py .\examples\sandbox\command_agent.py --live
 & $py .\examples\sandbox\compare_snapshot_modes.py --live --iterations 3 --output-dir .internal\results\live-snapshot-compare
 & $py .\examples\sandbox\snapshot_clone.py --live
-```
-
-The installed CLI can run the same examples. Apply the same endpoint override above to the Shell command.
-
-```powershell
-.\.venv\Scripts\aca-agent-sample.exe dynamic-session reuse --live
-.\.venv\Scripts\aca-agent-sample.exe dynamic-session coding-agent --live
-$oldEndpoint = $env:DYNAMIC_SESSIONS_POOL_ENDPOINT
-$env:DYNAMIC_SESSIONS_POOL_ENDPOINT = $shellEndpoint
-try { .\.venv\Scripts\aca-agent-sample.exe dynamic-session shell --live }
-finally {
-    if ($null -eq $oldEndpoint) { Remove-Item Env:DYNAMIC_SESSIONS_POOL_ENDPOINT -ErrorAction SilentlyContinue }
-    else { $env:DYNAMIC_SESSIONS_POOL_ENDPOINT = $oldEndpoint }
-}
-.\.venv\Scripts\aca-agent-sample.exe sandbox command-agent --live
-.\.venv\Scripts\aca-agent-sample.exe sandbox compare-modes --live --iterations 3 --output-dir .internal\results\live-snapshot-compare
-.\.venv\Scripts\aca-agent-sample.exe sandbox snapshot-clone --live
 ```
 
 | What to check | Details |
