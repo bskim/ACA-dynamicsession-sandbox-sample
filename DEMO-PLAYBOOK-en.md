@@ -234,7 +234,7 @@ hello-from-shell-session
    - Platform resume time (`resume_to_running_ms`) is roughly 1.2–1.4 seconds in both modes, and because `Memory` mode saves and restores RAM pages, `stop_to_stopped_ms` can take longer and single-call probe latency can vary with network jitter.
    - The primary reason to choose `Memory` mode is state continuity rather than raw resume speed: background processes started before stopping (in-memory index servers, language servers, local caches, REPL sessions) stay alive (`Worker restarted = False`), continuing with their `nonce`, memory buffer, and request counter (`in_memory_counter continuous = True`) intact.
 2. **`Disk` mode still preserves installed external CLI tools (`Installed tool preserved = True`) and files (`Disk SHA-256 preserved = True`)**:
-   - Stopping in `Disk` mode preserves the root filesystem containing `git`, `jq`, `sqlite3`, `agent-tool`, and project files without reinstallation; only the VM and RAM processes restart (`Worker restarted = True`).
+   - Stopping in `Disk` mode preserves the root filesystem containing `git`, `jq`, `sqlite3`, `agent-tool`, and project files without reinstallation; after `resume`, the host confirms that the process has exited (`worker_alive=False`) and restarts the RAM process (`Worker restarted = True`).
 3. **Selection summary**:
    - When continuity of live processes, sessions, or in-memory indexes matters → **`Memory` mode**
    - When preserving installed CLI tools and disk files is sufficient, or when attaching Data Disk volumes (which do not support `Memory` mode) → **`Disk` mode**

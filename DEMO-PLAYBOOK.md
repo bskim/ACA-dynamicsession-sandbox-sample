@@ -234,7 +234,7 @@ hello-from-shell-session
    - 플랫폼 재개 시간(`resume_to_running_ms`)은 두 모드 모두 약 1.2~1.4초 수준이며, `Memory` 모드는 RAM 페이지 전체를 저장·복원하므로 `stop_to_stopped_ms`가 더 길거나 네트워크 편차에 따라 단일 프로브 시간이 비슷하게 관측될 수 있습니다.
    - `Memory` 모드를 선택하는 핵심 이유는 단순 재개 속도가 아니라, 중지 전에 띄워둔 백그라운드 프로세스(인메모리 인덱스 서버, 언어 서버, 로컬 캐시, REPL 세션)가 죽지 않고 그대로 살아 있어서(`Worker restarted = False`) 난수 `nonce`·메모리 버퍼·요청 카운터(`in_memory_counter continuous = True`)를 재구축 없이 그대로 이어서 사용할 수 있다는 점입니다.
 2. **`Disk` 모드에서도 설치한 외부 CLI 도구(`Installed tool preserved = True`)와 파일(`Disk SHA-256 preserved = True`)은 그대로 보존**:
-   - `Disk` 모드로 중지하더라도 루트 파일시스템에 설치해 둔 `git`, `jq`, `sqlite3`, `agent-tool`과 작업 파일은 그대로 보존되므로 패키지 재설치는 필요 없으며, VM이 새로 부팅되면서 RAM 프로세스만 재기동(`Worker restarted = True`)됩니다.
+   - `Disk` 모드로 중지하더라도 루트 파일시스템에 설치해 둔 `git`, `jq`, `sqlite3`, `agent-tool`과 작업 파일은 그대로 보존되므로 패키지 재설치는 필요 없으며, `resume` 후 프로세스 종료(`worker_alive=False`)를 확인한 호스트가 RAM 프로세스를 재기동(`Worker restarted = True`)합니다.
 3. **모드 선택 기준**:
    - 메모리에 살아있는 프로세스/세션/인덱스 상태의 연속성이 필요할 때 → **`Memory` 모드**
    - 설치된 CLI 도구와 디스크 파일만 유지되면 되고, 빠른 정지(`stop`)나 추가 Data Disk 볼륨 연결이 필요할 때 → **`Disk` 모드** (Data Disk 연결 시 `Memory` 모드 미지원)

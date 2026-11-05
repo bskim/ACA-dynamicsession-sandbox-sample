@@ -112,7 +112,7 @@ The guest's `exit_code`, `stdout`, and `stderr` are normalized into `ToolExecuti
 | `installed_tool_preserved` | `true`: reuse CLI, packages and configuration | `true`: reuse CLI, packages and configuration |
 | `disk_preserved` | `true` | `true` |
 | `memory_preserved` | `true`: no index-server restart | `false`: old server absent |
-| `worker_restarted` | `false` | `true`: rerun the installed server program only |
+| `worker_restarted` | `false` | `true`: after `resume`, the host confirms process exit (`worker_alive=False`) and restarts the server program |
 
 The explicit snapshot/clone example captures a source sandbox where the CLI toolchain is installed and the RAM index server is already running. With zero provisioning calls (`clone_provision_count=0`) and no process restart (`clone_worker_restarted=false`), the clone immediately uses the installed CLIs and warm RAM server, then verifies its own independent Memory mode stop/resume (`clone_memory_stop_resume_passed=true`) and state isolation from the source. The default offline mode simulates these contracts.
 

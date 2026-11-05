@@ -112,7 +112,7 @@ sandbox 생성과 `/workspace` 초기화 후 호스트가 SDK의 `sandbox.exec(.
 | `installed_tool_preserved` | `true`: CLI·패키지·설정 재사용 | `true`: CLI·패키지·설정 재사용 |
 | `disk_preserved` | `true` | `true` |
 | `memory_preserved` | `true`: 인덱스 서버 재기동 없음 | `false`: 기존 서버 없음 |
-| `worker_restarted` | `false` | `true`: 설치된 서버 프로그램만 다시 실행 |
+| `worker_restarted` | `false` | `true`: `resume` 후 프로세스 종료(`worker_alive=False`)를 확인한 호스트가 서버 프로그램만 재기동 |
 
 명시적 snapshot/clone 예제는 실제 CLI 툴체인 설치와 RAM 인덱스 서버 기동까지 마친 원본을 스냅샷으로 캡처합니다. 복제된 clone은 프로비저닝 0회(`clone_provision_count=0`) 및 프로세스 재기동 없이(`clone_worker_restarted=false`) 즉시 CLI와 RAM 서버를 사용하고, 복제본 자체의 Memory 모드 stop/resume(`clone_memory_stop_resume_passed=true`) 및 원본과의 상태 독립성을 함께 검증합니다. 기본 오프라인 모드는 같은 계약을 모의합니다.
 
