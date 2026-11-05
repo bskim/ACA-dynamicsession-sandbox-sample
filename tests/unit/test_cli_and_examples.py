@@ -165,6 +165,23 @@ def test_coding_demo_rejects_cheating_model_without_real_file_and_function_fix()
     with pytest.raises(RuntimeError, match="Host verification failed after Turn 3"):
         module.run_coding_demo(agent2, client2, live=False)
 
+    # 3. Model fails Turn 2 with an unrelated NameError instead of AssertionError
+    unrelated_error_scripts = [
+        "import os\nos.makedirs('/mnt/data/agent-demo', exist_ok=True)\nturn_counter = 1\nsession_nonce = 'demo-nonce'\nopen('/mnt/data/agent-demo/add.py', 'w').write('def add(a, b):\\n    return a - b\\n')",
+        "turn_counter += 1\nundefined_symbol",
+        "open('/mnt/data/agent-demo/add.py', 'w').write('def add(a, b):\\n    return a + b\\n')\nprint('TEST PASSED')",
+    ]
+    responses3 = []
+    for idx, script in enumerate(unrelated_error_scripts, 1):
+        responses3.extend([
+            ModelResponse(tool_calls=(ToolCall(f"n-{idx}", "execute_python", json.dumps({"code": script})),)),
+            ModelResponse(content=f"Turn {idx}"),
+        ])
+    client3 = FakeDynamicSessionsClient()
+    agent3 = DynamicSessionsCodingAgent(FakeModelAdapter(responses3), client3, SessionRegistry(), owner="demo", conversation_id="cheat-3")
+    with pytest.raises(RuntimeError, match="AssertionError"):
+        module.run_coding_demo(agent3, client3, live=False)
+
 
 def remove_readonly(function, path, error):
     if not isinstance(error, PermissionError):

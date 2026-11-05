@@ -30,7 +30,9 @@ def fake_model() -> FakeModelAdapter:
     return FakeModelAdapter(responses)
 
 
-def verify_turn_one(client: Any, session_id: str) -> None:
+def verify_turn_one(client: Any, session_id: str, turn_res: Any = None) -> None:
+    if turn_res is not None and not turn_res.turns:
+        raise RuntimeError("Turn 1 did not execute any tool calls")
     raw = client.download_file(session_id, "/mnt/data/agent-demo/add.py").decode("utf-8")
     if "def add" not in raw:
         raise RuntimeError("Turn 1 did not write add() to /mnt/data/agent-demo/add.py")
@@ -46,7 +48,14 @@ def verify_turn_one(client: Any, session_id: str) -> None:
         raise RuntimeError("Host verification failed after Turn 1: broken add.py or session variables missing")
 
 
-def verify_turn_two(client: Any, session_id: str) -> None:
+def verify_turn_two(client: Any, session_id: str, turn_res: Any = None) -> None:
+    if turn_res is not None:
+        failed_turns = [t for t in turn_res.turns if t.result.status == "failed"]
+        if not failed_turns or any(
+            t.result.error_kind != "execution_failed" or "AssertionError" not in t.result.stderr
+            for t in failed_turns
+        ):
+            raise RuntimeError("Turn 2 must fail specifically with AssertionError from the broken add() test")
     probe = client.execute_python(
         session_id,
         "assert turn_counter == 2\n"
@@ -59,7 +68,9 @@ def verify_turn_two(client: Any, session_id: str) -> None:
         raise RuntimeError("Host verification failed after Turn 2: expected turn_counter==2 and broken add.py")
 
 
-def verify_turn_three(client: Any, session_id: str) -> None:
+def verify_turn_three(client: Any, session_id: str, turn_res: Any = None) -> None:
+    if turn_res is not None and not any(t.result.status == "succeeded" and "TEST PASSED" in t.result.stdout for t in turn_res.turns):
+        raise RuntimeError("Expected passing test output was not observed in Turn 3")
     raw = client.download_file(session_id, "/mnt/data/agent-demo/add.py").decode("utf-8")
     if "def add" not in raw:
         raise RuntimeError("Turn 3 did not preserve add() in /mnt/data/agent-demo/add.py")
@@ -101,11 +112,7 @@ def run_coding_demo(agent: DynamicSessionsCodingAgent, client: Any, *, live: boo
         results.append(turn_res)
         if turn_res.status != "completed":
             raise RuntimeError("Agent did not complete all turns")
-        verifier(client, agent.session_id)
-    if not results[0].turns or not any(t.result.status == "failed" and t.result.error_kind == "execution_failed" for t in results[1].turns):
-        raise RuntimeError("Expected creation and failing test were not observed")
-    if not any(t.result.status == "succeeded" and "TEST PASSED" in t.result.stdout for t in results[2].turns):
-        raise RuntimeError("Expected passing test was not observed")
+        verifier(client, agent.session_id, turn_res)
     return {
         "mode": "live" if live else "offline",
         "session": mask_session_id(agent.session_id),
