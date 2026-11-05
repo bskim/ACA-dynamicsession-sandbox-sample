@@ -30,11 +30,11 @@ ACA Sandbox를 활용할 때 에이전트(LLM 호출 루프)를 어디에 배치
 | **패턴 2: 내장 에이전트 프리셋 (`copilot` / `claude`) + Provider Credentials** | 샌드박스 내부 | Sandbox Group에 등록 후 부팅 시 게스트 내부에 주입 (`ANTHROPIC_API_KEY` 등) | - 플랫폼이 제공하는 `copilot`(GitHub Copilot CLI 내장) 또는 `claude`(Claude Code CLI 내장) 디스크 이미지와 포털의 AI Provider Credentials(Fine-grained PAT `github_pat_...` 또는 `sk-ant-...` 키)를 사용합니다.<br>- 기성 코딩 에이전트 CLI를 가장 빠르게 구동할 때 편리하지만, 게스트 런타임에 토큰이 로드되며 토큰 회전 시 실행 중인 샌드박스를 재시작해야 합니다. |
 | **패턴 3: 내부 에이전트 + Egress Proxy `Transform` 헤더 주입** | 샌드박스 내부 | 게스트 바깥의 Egress Proxy<br>(`secretRef` / `managedIdentityRef`) | - 에이전트 프로세스를 샌드박스 안에서 실행하되, 실제 API 키(Sandbox Group Secret)나 Managed Identity 토큰은 게스트 환경 변수에 넣지 않습니다.<br>- 샌드박스 내부 코드가 외부 LLM API로 요청을 보내면 게스트 바깥의 Egress Proxy가 `Transform` 규칙으로 `Authorization` 헤더를 주입하므로, 게스트 내부 코드에 실제 자격 증명 값을 노출하지 않고 내부 에이전트를 구동할 수 있습니다. ([Egress 정책 상세](https://learn.microsoft.com/ko-kr/azure/container-apps/sandboxes-egress-policies)) |
 
-## 대안 A / B 및 선택 트레이드오프
+## Dynamic Sessions와 ACA Sandbox 비교 및 트레이드오프
 
-A(`Dynamic Sessions`)는 `Microsoft.App/sessionPools`의 PythonLTS 또는 Shell 세션으로 요청 `identifier`를 라우팅합니다. 호출 측에서는 `identifier` 문자열 하나만 관리하면 세션 풀이 할당·라우팅·유휴 만료 정리를 자동으로 처리하므로 구현이 매우 단순합니다. 대신 원하는 시점에 세션을 일시 중지(`stop`)했다가 재개(`resume`)하거나 상태를 스냅샷으로 찍어 복제(`clone`)할 수는 없으며, 유휴 시간이 지나면 상태가 사라집니다.
+Dynamic Sessions는 `Microsoft.App/sessionPools`의 PythonLTS 또는 Shell 세션으로 요청 `identifier`를 라우팅합니다. 호출 측에서는 `identifier` 문자열 하나만 관리하면 세션 풀이 할당·라우팅·유휴 만료 정리를 자동으로 처리하므로 구현이 매우 단순합니다. 대신 원하는 시점에 세션을 일시 중지(`stop`)했다가 재개(`resume`)하거나 상태를 스냅샷으로 찍어 복제(`clone`)할 수는 없으며, 유휴 시간이 지나면 상태가 사라집니다.
 
-B(`ACA Sandbox`)는 `Microsoft.App/sandboxGroups`의 격리된 마이크로 VM을 만들고 SDK로 exec·stop·resume·snapshot·clone·삭제를 직접 제어합니다. 샌드박스 내부에 에이전트 CLI 툴체인(`git`, `jq`, `sqlite3`, `agent-tool`·`repo-audit` 등)과 루프백 리포지토리 인덱스 도구 서버(`state_worker.py`)를 설치하고, 원하는 시점에 `Memory`(RAM+디스크 보존) 또는 `Disk`(디스크 보존) 모드로 중지·재개하거나 워밍업된 상태를 명시적 스냅샷으로 복제할 수 있어 자유도가 높습니다. 대신 에이전트 요청을 어느 `sandbox_id`에 연결할지 매핑하는 상태 관리와 `stop`/`resume`/`delete` 수명 주기 오케스트레이션을 고객(호스트 백엔드)에서 직접 구현해야 합니다. [A 가이드](dynamic-sessions.md) · [B 가이드](sandbox.md) · [상태 오라클](snapshot-comparison.md)
+ACA Sandbox는 `Microsoft.App/sandboxGroups`의 격리된 마이크로 VM을 만들고 SDK로 exec·stop·resume·snapshot·clone·삭제를 직접 제어합니다. 샌드박스 내부에 에이전트 CLI 툴체인(`git`, `jq`, `sqlite3`, `agent-tool`·`repo-audit` 등)과 루프백 리포지토리 인덱스 도구 서버(`state_worker.py`)를 설치하고, 원하는 시점에 `Memory`(RAM+디스크 보존) 또는 `Disk`(디스크 보존) 모드로 중지·재개하거나 워밍업된 상태를 명시적 스냅샷으로 복제할 수 있어 자유도가 높습니다. 대신 에이전트 요청을 어느 `sandbox_id`에 연결할지 매핑하는 상태 관리와 `stop`/`resume`/`delete` 수명 주기 오케스트레이션을 고객(호스트 백엔드)에서 직접 구현해야 합니다. [Dynamic Sessions 가이드](dynamic-sessions.md) · [Sandbox 가이드](sandbox.md) · [상태 오라클](snapshot-comparison.md)
 
 ## 운영 경계
 

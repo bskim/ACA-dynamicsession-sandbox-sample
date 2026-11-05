@@ -18,7 +18,7 @@ Run model-generated code and commands in isolated execution environments. A trus
 | Isolation and execution | Pool-managed sessions; PythonLTS, optional Shell | Isolated micro VM; external CLI installation and background process control |
 | Suitable for | Short interactive code/shell execution | Resumable, long-lived agent workspace |
 
-A and B are independent alternatives. Only model-backed examples require Foundry.
+Dynamic Sessions and ACA Sandbox can be configured and run independently; only model-backed examples require Foundry.
 
 ## Validation scope
 
