@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -30,21 +32,57 @@ def fake_model() -> FakeModelAdapter:
     return FakeModelAdapter(responses)
 
 
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+_EXC_LINE_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_.]*)(?::.*)?$")
+
+
+def _validate_add_source(raw: str) -> None:
+    try:
+        tree = ast.parse(raw)
+    except SyntaxError as exc:
+        raise RuntimeError("Invalid Python syntax in /mnt/data/agent-demo/add.py") from exc
+    if not any(
+        isinstance(node, ast.FunctionDef) and node.name == "add" and len(node.args.args) == 2
+        for node in tree.body
+    ):
+        raise RuntimeError("/mnt/data/agent-demo/add.py must define def add(a, b)")
+
+
+def _extract_exception_type(stderr: str) -> str | None:
+    cleaned = _ANSI_RE.sub("", stderr or "")
+    lines = [line.strip() for line in cleaned.splitlines() if line.strip()]
+    if not lines:
+        return None
+    match = _EXC_LINE_RE.match(lines[-1])
+    if not match:
+        return None
+    exc_type = match.group(1)
+    for idx, line in enumerate(lines[:-1]):
+        if len(line) >= 10 and set(line) == {"-"} and idx + 1 < len(lines):
+            header = lines[idx + 1].split()[0].rstrip(":")
+            if header != exc_type:
+                return None
+    return exc_type
+
+
 def verify_turn_one(client: Any, session_id: str, turn_res: Any = None) -> None:
-    if turn_res is not None and not turn_res.turns:
-        raise RuntimeError("Turn 1 did not execute any tool calls")
+    if turn_res is not None and (
+        not turn_res.turns or any(t.result.status != "succeeded" for t in turn_res.turns)
+    ):
+        raise RuntimeError("Turn 1 tool calls did not succeed")
     raw = client.download_file(session_id, "/mnt/data/agent-demo/add.py").decode("utf-8")
-    if "def add" not in raw:
-        raise RuntimeError("Turn 1 did not write add() to /mnt/data/agent-demo/add.py")
+    _validate_add_source(raw)
     probe = client.execute_python(
         session_id,
         "assert turn_counter == 1\n"
         "assert session_nonce == 'demo-nonce'\n"
+        "add = None\n"
         "exec(open('/mnt/data/agent-demo/add.py').read())\n"
-        "assert add(2, 3) != 5\n"
+        "assert add(2, 3) == -1\n"
+        "assert add(10, 4) == 6\n"
         "print('HOST_VERIFIED_BROKEN')",
     )
-    if probe.status != "succeeded" or "HOST_VERIFIED_BROKEN" not in probe.stdout:
+    if probe.status != "succeeded" or probe.stdout.strip().splitlines()[-1:] != ["HOST_VERIFIED_BROKEN"]:
         raise RuntimeError("Host verification failed after Turn 1: broken add.py or session variables missing")
 
 
@@ -52,38 +90,45 @@ def verify_turn_two(client: Any, session_id: str, turn_res: Any = None) -> None:
     if turn_res is not None:
         failed_turns = [t for t in turn_res.turns if t.result.status == "failed"]
         if not failed_turns or any(
-            t.result.error_kind != "execution_failed" or "AssertionError" not in t.result.stderr
+            t.result.error_kind != "execution_failed"
+            or _extract_exception_type(t.result.stderr) != "AssertionError"
             for t in failed_turns
         ):
-            raise RuntimeError("Turn 2 must fail specifically with AssertionError from the broken add() test")
+            raise RuntimeError("Turn 2 must fail specifically with an uncaught AssertionError")
     probe = client.execute_python(
         session_id,
         "assert turn_counter == 2\n"
         "assert session_nonce == 'demo-nonce'\n"
+        "add = None\n"
         "exec(open('/mnt/data/agent-demo/add.py').read())\n"
-        "assert add(2, 3) != 5\n"
+        "assert add(2, 3) == -1\n"
         "print('HOST_VERIFIED_STILL_BROKEN')",
     )
-    if probe.status != "succeeded" or "HOST_VERIFIED_STILL_BROKEN" not in probe.stdout:
+    if probe.status != "succeeded" or probe.stdout.strip().splitlines()[-1:] != ["HOST_VERIFIED_STILL_BROKEN"]:
         raise RuntimeError("Host verification failed after Turn 2: expected turn_counter==2 and broken add.py")
 
 
 def verify_turn_three(client: Any, session_id: str, turn_res: Any = None) -> None:
-    if turn_res is not None and not any(t.result.status == "succeeded" and "TEST PASSED" in t.result.stdout for t in turn_res.turns):
+    if turn_res is not None and (
+        not turn_res.turns
+        or any(t.result.status != "succeeded" for t in turn_res.turns)
+        or not any("TEST PASSED" in [line.strip() for line in t.result.stdout.splitlines()] for t in turn_res.turns)
+    ):
         raise RuntimeError("Expected passing test output was not observed in Turn 3")
     raw = client.download_file(session_id, "/mnt/data/agent-demo/add.py").decode("utf-8")
-    if "def add" not in raw:
-        raise RuntimeError("Turn 3 did not preserve add() in /mnt/data/agent-demo/add.py")
+    _validate_add_source(raw)
     probe = client.execute_python(
         session_id,
         "assert turn_counter == 2\n"
         "assert session_nonce == 'demo-nonce'\n"
+        "add = None\n"
         "exec(open('/mnt/data/agent-demo/add.py').read())\n"
         "assert add(2, 3) == 5\n"
         "assert add(10, -4) == 6\n"
+        "assert add(-7, -8) == -15\n"
         "print('HOST_VERIFIED_REPAIRED')",
     )
-    if probe.status != "succeeded" or "HOST_VERIFIED_REPAIRED" not in probe.stdout:
+    if probe.status != "succeeded" or probe.stdout.strip().splitlines()[-1:] != ["HOST_VERIFIED_REPAIRED"]:
         raise RuntimeError("Host verification failed after Turn 3: repaired add() did not pass host assertions")
 
 

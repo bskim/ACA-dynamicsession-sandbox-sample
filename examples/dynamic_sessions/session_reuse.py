@@ -52,45 +52,68 @@ def main() -> int:
                     "turn_counter = 100\n"
                     f"nonce = {nonce!r}\n"
                     f"open({filename!r}, 'w').write({original!r})\n"
-                    "print(f'initialized: turn_counter={turn_counter}, nonce={nonce}')"
+                    "print(turn_counter)\nprint(nonce)"
                 )
                 res = client.execute_python(a, code)
-                if res.status != "succeeded":
+                if res.status != "succeeded" or res.stdout.splitlines() != ["100", nonce]:
                     raise RuntimeError("Init failed: " + res.stderr)
+                if client.download_file(a, filename).decode("utf-8") != original:
+                    raise RuntimeError("Init file verification failed")
                 print(json.dumps({
                     "step": "init",
                     "session_id": args.session_id,
                     "turn_counter": 100,
                     "nonce": nonce,
                     "file_created": filename,
-                    "stdout": res.stdout.strip(),
                 }, ensure_ascii=False, indent=2))
                 return 0
             if args.step == "reuse":
                 code = (
-                    "import json, os\n"
-                    "exists = 'turn_counter' in globals()\n"
-                    "if exists:\n"
-                    "    turn_counter += 1\n"
-                    f"content = open({filename!r}).read() if os.path.exists({filename!r}) else None\n"
-                    "print(json.dumps({'variable_preserved': exists, 'turn_counter': globals().get('turn_counter'), 'nonce': globals().get('nonce'), 'file_content': content}))"
+                    "assert 'turn_counter' in globals()\n"
+                    "assert 'nonce' in globals()\n"
+                    "turn_counter += 1\n"
+                    "print(turn_counter)\n"
+                    "print(nonce)"
                 )
                 res = client.execute_python(a, code)
                 if res.status != "succeeded":
-                    raise RuntimeError("Reuse failed: " + res.stderr)
-                data = json.loads(res.stdout.strip().splitlines()[-1])
-                print(json.dumps({"step": "reuse", "session_id": args.session_id, **data}, ensure_ascii=False, indent=2))
+                    raise RuntimeError("Reuse failed (session state missing): " + res.stderr)
+                lines = res.stdout.strip().splitlines()
+                if len(lines) != 2 or not lines[0].isdigit() or int(lines[0]) <= 100 or not lines[1]:
+                    raise RuntimeError("Reuse state verification failed")
+                file_content = client.download_file(a, filename).decode("utf-8")
+                if file_content != original:
+                    raise RuntimeError("Reuse file content mismatch")
+                print(json.dumps({
+                    "step": "reuse",
+                    "session_id": args.session_id,
+                    "variable_preserved": True,
+                    "turn_counter": int(lines[0]),
+                    "nonce": lines[1],
+                    "file_content": file_content,
+                }, ensure_ascii=False, indent=2))
                 return 0
             if args.step == "check":
-                code = (
-                    "import json, os\n"
-                    "print(json.dumps({'variable_exists': 'turn_counter' in globals(), 'turn_counter': globals().get('turn_counter'), 'file_exists': os.path.exists(" + repr(filename) + ")}))"
-                )
-                res = client.execute_python(a, code)
+                res = client.execute_python(a, "print('turn_counter' in globals())\nprint('nonce' in globals())")
                 if res.status != "succeeded":
                     raise RuntimeError("Check failed: " + res.stderr)
-                data = json.loads(res.stdout.strip().splitlines()[-1])
-                print(json.dumps({"step": "check", "session_id": args.session_id, **data}, ensure_ascii=False, indent=2))
+                if res.stdout.strip().splitlines() != ["False", "False"]:
+                    raise RuntimeError("Isolation check failed: session variables leaked")
+                try:
+                    client.download_file(a, filename)
+                except Exception as exc:
+                    from aca_agent_sample.dynamic_sessions import DynamicSessionsError
+                    if not isinstance(exc, DynamicSessionsError) or exc.status_code != 404:
+                        raise
+                else:
+                    raise RuntimeError("Isolation check failed: session file leaked")
+                print(json.dumps({
+                    "step": "check",
+                    "session_id": args.session_id,
+                    "variable_exists": False,
+                    "turn_counter": None,
+                    "file_exists": False,
+                }, ensure_ascii=False, indent=2))
                 return 0
 
         if args.live:

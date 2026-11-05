@@ -40,9 +40,14 @@ def main() -> int:
             if args.live:
                 print(f"[shell-agent] Run {idx}/2 stdout:\n{res.stdout.strip()}", file=sys.stderr, flush=True)
             results.append(res)
-        for result in results:
+        expected_lines = [
+            ["/mnt/data"],
+            ["hello-from-shell-session", "/mnt/data"],
+        ]
+        for result, expected in zip(results, expected_lines):
             if result.status != "succeeded": raise RuntimeError("Shell execution failed: " + result.stderr)
-            if not result.stdout.strip().endswith("/mnt/data"): raise RuntimeError("Shell working directory mismatch")
+            if [line.strip() for line in result.stdout.strip().splitlines()] != expected:
+                raise RuntimeError("Shell output or working directory mismatch")
         print(json.dumps({"mode": "live" if args.live else "offline", "session": mask_session_id(session_id), "runs": 2, "cwd_explicit_each_time": True}, ensure_ascii=False))
         return 0
     finally:

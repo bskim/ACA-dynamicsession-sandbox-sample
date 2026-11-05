@@ -165,10 +165,10 @@ def test_coding_demo_rejects_cheating_model_without_real_file_and_function_fix()
     with pytest.raises(RuntimeError, match="Host verification failed after Turn 3"):
         module.run_coding_demo(agent2, client2, live=False)
 
-    # 3. Model fails Turn 2 with an unrelated NameError instead of AssertionError
+    # 3. Model fails Turn 2 with a NameError whose symbol contains 'AssertionError'
     unrelated_error_scripts = [
         "import os\nos.makedirs('/mnt/data/agent-demo', exist_ok=True)\nturn_counter = 1\nsession_nonce = 'demo-nonce'\nopen('/mnt/data/agent-demo/add.py', 'w').write('def add(a, b):\\n    return a - b\\n')",
-        "turn_counter += 1\nundefined_symbol",
+        "turn_counter += 1\nundefined_AssertionError_symbol",
         "open('/mnt/data/agent-demo/add.py', 'w').write('def add(a, b):\\n    return a + b\\n')\nprint('TEST PASSED')",
     ]
     responses3 = []
@@ -181,6 +181,38 @@ def test_coding_demo_rejects_cheating_model_without_real_file_and_function_fix()
     agent3 = DynamicSessionsCodingAgent(FakeModelAdapter(responses3), client3, SessionRegistry(), owner="demo", conversation_id="cheat-3")
     with pytest.raises(RuntimeError, match="AssertionError"):
         module.run_coding_demo(agent3, client3, live=False)
+
+    # 4. Model fixes add() only in memory during Turn 3 without updating /mnt/data/agent-demo/add.py on disk
+    memory_only_fix_scripts = [
+        "import os\nos.makedirs('/mnt/data/agent-demo', exist_ok=True)\nturn_counter = 1\nsession_nonce = 'demo-nonce'\nopen('/mnt/data/agent-demo/add.py', 'w').write('def add(a, b):\\n    return a - b\\n')",
+        "assert turn_counter == 1\nassert session_nonce == 'demo-nonce'\nturn_counter += 1\nexec(open('/mnt/data/agent-demo/add.py').read())\nassert add(2, 3) == 5",
+        "def add(a, b):\n    return a + b\nassert add(2, 3) == 5\nprint('TEST PASSED')",
+    ]
+    responses4 = []
+    for idx, script in enumerate(memory_only_fix_scripts, 1):
+        responses4.extend([
+            ModelResponse(tool_calls=(ToolCall(f"m-{idx}", "execute_python", json.dumps({"code": script})),)),
+            ModelResponse(content=f"Turn {idx}"),
+        ])
+    client4 = FakeDynamicSessionsClient()
+    agent4 = DynamicSessionsCodingAgent(FakeModelAdapter(responses4), client4, SessionRegistry(), owner="demo", conversation_id="cheat-4")
+    with pytest.raises(RuntimeError, match="Host verification failed after Turn 3"):
+        module.run_coding_demo(agent4, client4, live=False)
+
+    # 5. Exception summary parser checks actual exception type, not substrings
+    assert module._extract_exception_type("NameError: undefined_AssertionError_symbol is not defined") == "NameError"
+    assert module._extract_exception_type(
+        "---------------------------------------------------------------------------\n"
+        "NameError                                 Traceback (most recent call last)\n"
+        "----> 1 undefined_AssertionError_symbol\n\n"
+        "NameError: name 'undefined_AssertionError_symbol' is not defined"
+    ) == "NameError"
+    assert module._extract_exception_type(
+        "\x1b[31m---------------------------------------------------------------------------\x1b[0m\n"
+        "AssertionError                            Traceback (most recent call last)\n"
+        "----> 5 assert add(2,3)==5\n\n"
+        "\x1b[31mAssertionError\x1b[0m:"
+    ) == "AssertionError"
 
 
 def remove_readonly(function, path, error):
