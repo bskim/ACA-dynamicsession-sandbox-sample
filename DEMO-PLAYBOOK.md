@@ -280,6 +280,16 @@ hello-from-shell-session
 ```
 - `counter_progression` (`2 → 3 → 4`, 원본은 `3`): 백그라운드 도구 서버(`state_worker.py`)는 상태 확인(`probe`)이나 캐시 조회 요청을 받을 때마다 RAM의 `in_memory_counter`를 `1`씩 증가시킵니다. 원본에서 카운터가 `2`일 때 스냅샷을 찍었는데, 복제본 생성 직후 서버를 새로 시작(`start`)하지 않고 `probe`만 호출했는데도 `1`로 리셋되지 않고 `3`이 반환되었으며, 복제본을 `Memory` 모드로 `stop` → `resume`한 뒤 다시 호출하면 `4`로 이어집니다.
 
+### 4) 중지/재개(`Memory`/`Disk`) vs. 명시적 캡처(`create_snapshot`/`commit`) 및 `DataDisk` 볼륨 제약
+
+| 구분 | API / 설정 | 보존 대상 | 사양·옵션 변경 및 `DataDisk` 볼륨 연결 시 동작 |
+| :--- | :--- | :--- | :--- |
+| **중지/재개 모드 (`Memory` / `Disk`)** | `set_lifecycle_policy(mode=...)` 후 `stop()` / `resume()` | • `Memory`: RAM + 루트 디스크<br>• `Disk`: 루트 디스크만 | **동일 샌드박스(`sandbox_id` 유지)** 재개. `DataDisk` 볼륨 연결 시 `Memory` 모드는 `HTTP 400`으로 거부되며 `Disk` 모드(또는 자동 중지 비활성화)만 지원됩니다. |
+| **명시적 스냅샷 (`Snapshot`)** | `sandbox.create_snapshot()` → `begin_create_sandbox(snapshot_id=...)` | **항상 RAM + 루트 디스크 전체** (모드 선택 없음) | **새 샌드박스(`sandbox_id` 분리)**로 복제. 캡처된 스펙 그대로만 복원되며(생성 시 CPU/메모리·볼륨 변경 불가), 내부적으로 메모리 스냅샷을 사용하므로 **`DataDisk` 볼륨이 연결된 샌드박스에서는 `create_snapshot()` 호출 자체가 `HTTP 400`으로 거부**됩니다. |
+| **명시적 디스크 커밋 (`DiskImage`)** | `sandbox.commit()` → `begin_create_sandbox(disk_id=...)` | **루트 디스크만** (RAM 제외) | 패키지 설치 상태만 베이스 디스크 이미지로 저장. 복제 시 CPU/메모리·환경변수·볼륨을 새로 지정할 수 있으며, `DataDisk` 볼륨이 연결된 샌드박스에서도 `commit()`이 지원됩니다. |
+
+- **`DataDisk` 마운트 시 디스크 예산(Disk Budget) 유의사항**: ACA Sandbox는 `1000m` CPU(1 vCPU)당 총 디스크 예산(루트 디스크 + `DataDisk` 합산)이 `20 GiB`이며, 기본 루트 디스크 크기가 `20 GiB` 전체를 사용합니다. 따라서 `DataDisk` 볼륨을 마운트할 때는 생성 시 `disk_size="10Gi"`처럼 루트 디스크 크기를 줄이거나 `cpu="1250m"` 이상으로 CPU를 늘려야 합니다.
+
 ---
 
 ## Step 마지막. 실습 종료 후 리소스 정리

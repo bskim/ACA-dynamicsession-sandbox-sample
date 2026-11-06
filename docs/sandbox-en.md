@@ -167,3 +167,13 @@ This scenario captures an explicit snapshot (`create_snapshot`) of a source sand
   - `clone_immediately_after_create: 3`: Immediately after creating the clone, probing the server without starting it returns `3`, continuing from the snapshot's in-memory counter (`2`).
   - `clone_after_own_memory_stop_resume: 4`: Stopping and resuming the cloned sandbox itself in `Memory` mode preserves its RAM process, advancing the next probe from `3` to `4`.
   - `source_after_independent_probe: 3`: Even after the clone reaches `4` and patches its project files/DB, the source sandbox remains an independent VM whose next probe returns `2 + 1 = 3` with its project configuration untouched (`source_project_unchanged: true`). See the [deployment, execution and cleanup How-To](how-to-deploy-and-run-en.md) for reproduction.
+
+### Explicit `create_snapshot` vs. `commit` (`DiskImage`) and `DataDisk` volume constraints
+
+- **Distinguishing single-sandbox `stop`/`resume` from explicit capture APIs**:
+  - `stop()`/`resume()` pauses and wakes the **same `sandbox_id`**, letting you choose `Memory` (RAM + root disk) or `Disk` (root disk only) mode.
+  - Explicit `create_snapshot()` (`POST .../snapshot`) has no mode selector and **always captures both RAM and the root disk**. Restoring from `snapshot_id` replays the captured spec as-is without allowing CPU/memory or volume overrides.
+  - To capture only the root filesystem and customize CPU/memory, environment variables, or volumes when creating new sandboxes, use `sandbox.commit()` (`DiskImage`, `disk_id`).
+- **Constraints when mounting `DataDisk` volumes (verified against the live API)**:
+  - On a sandbox with an attached `DataDisk` volume, both `Memory`-mode auto-suspend and **explicit `create_snapshot()` calls are rejected with `HTTP 400 InvalidRequest` (`Memory snapshots are not supported for sandboxes with data disk volumes`)**. Use `Disk` mode for `stop`/`resume` and `sandbox.commit()` (`DiskImage`) for reusable disk captures.
+  - In addition, ACA Sandbox enforces a `20 GiB` total disk budget (root disk + `DataDisk` volumes combined) per `1000m` CPU (1 vCPU), and the default root disk uses the full `20 GiB`. When attaching a `DataDisk` volume, either specify a smaller root disk (for example `disk_size="10Gi"`) or increase CPU (for example `cpu="1250m"` or higher).

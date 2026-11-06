@@ -167,3 +167,13 @@ sandbox 생성과 `/workspace` 초기화 후 호스트가 SDK의 `sandbox.exec(.
   - `clone_immediately_after_create: 3`: 복제 샌드박스 생성 직후 서버를 새로 시작하지 않고 프로브만 호출했는데도 스냅샷 시점의 RAM 값(`2`)에서 이어져 `3`을 반환했습니다.
   - `clone_after_own_memory_stop_resume: 4`: 복제된 샌드박스를 자체적으로 `Memory` 모드로 `stop` → `resume`한 뒤 프로브를 호출하면 `3`에서 `4`로 이어집니다.
   - `source_after_independent_probe: 3`: 복제본에서 카운터가 `4`까지 올라가고 설정 파일/DB를 패치했더라도, 원본 샌드박스는 독립된 VM이므로 자기 프로브 시 `2 + 1 = 3`을 반환하며 원본 프로젝트 설정(`source_project_unchanged: true`)도 그대로 유지됩니다. 재현 절차는 [배포·실행·정리 How-To](how-to-deploy-and-run.md)를 참조하세요.
+
+### 스냅샷(`create_snapshot`) vs. 디스크 커밋(`commit`) 및 `DataDisk` 볼륨 제약
+
+- **단일 샌드박스 중지/재개(`stop`/`resume`)와 명시적 캡처 API의 구분**:
+  - `stop()`/`resume()`은 **동일한 `sandbox_id`**를 재웠다 깨우며 `Memory`(RAM+루트 디스크) 또는 `Disk`(루트 디스크만) 모드를 선택할 수 있습니다.
+  - 명시적 `create_snapshot()`(`POST .../snapshot`)은 별도 모드 선택 없이 **항상 RAM + 루트 디스크 전체를 캡처**하며, `snapshot_id`로 복제할 때는 캡처 당시의 CPU/메모리·볼륨 구성을 변경할 수 없습니다.
+  - 루트 파일시스템만 이미지로 저장해 두고 생성 시 CPU/메모리·환경변수·볼륨을 새로 지정하려면 `sandbox.commit()`(`DiskImage`, `disk_id`)을 사용합니다.
+- **`DataDisk` 볼륨 마운트 시 제약 사항 (라이브 API 검증 기준)**:
+  - `DataDisk` 볼륨이 연결된 샌드박스는 `Memory` 모드 중지/재개뿐 아니라 **명시적 `create_snapshot()` 호출도 `HTTP 400 InvalidRequest`(`Memory snapshots are not supported for sandboxes with data disk volumes`)로 거부**됩니다. `DataDisk`를 마운트한 경우에는 `Disk` 모드 중지/재개와 `sandbox.commit()`(`DiskImage`)만 사용할 수 있습니다.
+  - 또한 `1000m` CPU(1 vCPU)당 총 디스크 예산(루트 디스크 + `DataDisk` 합산)은 `20 GiB`이며 기본 루트 디스크가 `20 GiB`를 사용하므로, `DataDisk` 볼륨을 연결하려면 생성 시 `disk_size="10Gi"`처럼 루트 디스크 크기를 줄이거나 `cpu="1250m"` 이상으로 지정해야 합니다.

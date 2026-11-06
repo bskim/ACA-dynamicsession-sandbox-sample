@@ -280,6 +280,16 @@ hello-from-shell-session
 ```
 - `counter_progression` (`2 → 3 → 4`, source at `3`): The background tool server (`state_worker.py`) increments its in-memory `in_memory_counter` by `1` on each probe or cache query. Capturing the snapshot when the source counter is `2` and immediately probing the newly created clone without starting the server returns `3` (rather than resetting to `1`), and stopping/resuming the clone in `Memory` mode advances the next probe to `4`.
 
+### 4) Suspend/Resume (`Memory`/`Disk`) vs. Explicit Capture (`create_snapshot`/`commit`) and `DataDisk` volume constraints
+
+| Mechanism | API / Setting | Preserved state | Spec override & behavior with attached `DataDisk` volumes |
+| :--- | :--- | :--- | :--- |
+| **Suspend/Resume mode (`Memory` / `Disk`)** | `set_lifecycle_policy(mode=...)` + `stop()` / `resume()` | • `Memory`: RAM + root disk<br>• `Disk`: root disk only | Resumes the **same sandbox (`sandbox_id` kept)**. With a `DataDisk` volume attached, `Memory` mode is rejected (`HTTP 400`); only `Disk` mode (or disabling auto-suspend) is supported. |
+| **Explicit Snapshot (`Snapshot`)** | `sandbox.create_snapshot()` → `begin_create_sandbox(snapshot_id=...)` | **Always RAM + root disk** (no mode selector) | Clones a **new sandbox (distinct `sandbox_id`)**. Restores the captured spec as-is (CPU/memory/volumes cannot be overridden on restore). Because it uses a memory snapshot, **calling `create_snapshot()` on a sandbox with an attached `DataDisk` volume is rejected with `HTTP 400`**. |
+| **Explicit Disk Commit (`DiskImage`)** | `sandbox.commit()` → `begin_create_sandbox(disk_id=...)` | **Root disk only** (excludes RAM) | Saves installed packages/files as a reusable disk image. New sandboxes can override CPU/memory, environment variables, and volumes, and `commit()` succeeds even when a `DataDisk` volume is attached. |
+
+- **Disk budget note when mounting `DataDisk` volumes**: ACA Sandbox enforces a `20 GiB` total disk budget (root disk + `DataDisk` volumes combined) per `1000m` CPU (1 vCPU), and the default root disk consumes the full `20 GiB`. To mount a `DataDisk` volume, either reduce the root disk size at creation (for example `disk_size="10Gi"`) or increase CPU (for example `cpu="1250m"` or higher).
+
 ---
 
 ## Final Step. Cleaning up resources after testing
