@@ -174,6 +174,6 @@ This scenario captures an explicit snapshot (`create_snapshot`) of a source sand
   - `stop()`/`resume()` pauses and wakes the **same `sandbox_id`**, letting you choose `Memory` (RAM + root disk) or `Disk` (root disk only) mode.
   - Explicit `create_snapshot()` (`POST .../snapshot`) has no mode selector and **always captures both RAM and the root disk**. Restoring from `snapshot_id` replays the captured spec as-is without allowing CPU/memory or volume overrides.
   - To capture only the root filesystem and customize CPU/memory, environment variables, or volumes when creating new sandboxes, use `sandbox.commit()` (`DiskImage`, `disk_id`).
-- **Constraints when mounting `DataDisk` volumes (verified against the live API)**:
+- **Constraints when mounting `DataDisk` volumes**:
   - On a sandbox with an attached `DataDisk` volume, both `Memory`-mode auto-suspend and **explicit `create_snapshot()` calls are rejected with `HTTP 400 InvalidRequest` (`Memory snapshots are not supported for sandboxes with data disk volumes`)**. Use `Disk` mode for `stop`/`resume` and `sandbox.commit()` (`DiskImage`) for reusable disk captures.
   - In addition, ACA Sandbox enforces a `20 GiB` total disk budget (root disk + `DataDisk` volumes combined) per `1000m` CPU (1 vCPU), and the default root disk uses the full `20 GiB`. When attaching a `DataDisk` volume, either specify a smaller root disk (for example `disk_size="10Gi"`) or increase CPU (for example `cpu="1250m"` or higher).
